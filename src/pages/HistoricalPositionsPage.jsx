@@ -129,6 +129,7 @@ const HistoricalPositionsPage = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [appliedFilters, setAppliedFilters] = useState({ from: defaults.from, to: defaults.to, threshold: 5, percentage: true })
 
+  
   // Close the custom date picker when clicking/tapping outside of it (desktop + mobile)
   useEffect(() => {
     if (!datePickerOpen) return undefined
@@ -352,5 +353,4 @@ const HistoricalPositionsPage = () => {
     </div>
   )
 }
-
 export default HistoricalPositionsPage
