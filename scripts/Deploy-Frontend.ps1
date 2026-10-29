@@ -44,7 +44,7 @@ Assert-NoLink $backupBase
 if ($source -eq $destination -or $source.StartsWith($destination + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Source must be outside the web root.' }
 if ($backupBase -eq $destination -or $backupBase.StartsWith($destination + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Backups must be outside the web root.' }
 
-$required = @('Favicon.svg', 'favicon-icon.png', 'index.html', 'manifest.webmanifest', 'registerSW.js', 'vite.svg', 'sw.js')
+$required = @('Favicon.svg', 'favicon-icon.png', 'index.html', 'manifest.webmanifest', 'pwa-192x192.png', 'pwa-512x512.png', 'vite.svg', 'sw.js')
 foreach ($name in $required) {
     if (!(Test-Path -LiteralPath (Safe-Child $source $name) -PathType Leaf)) { throw "Missing required build file: $name" }
 }
@@ -57,7 +57,7 @@ if (!$assets.Count) { throw 'The assets directory is empty.' }
 $workbox = @(Get-ChildItem -LiteralPath $source -File | Where-Object { $_.Name -match '^workbox-[a-f0-9]+\.js$' } | ForEach-Object { $_.Name })
 if (!$workbox.Count) { throw 'Missing Workbox runtime.' }
 # Dependencies first; entry points last. Never mirror or clear the web root.
-$files = @($assets) + $workbox + @('Favicon.svg', 'favicon-icon.png', 'vite.svg', 'manifest.webmanifest', 'registerSW.js', 'index.html', 'sw.js')
+$files = @($assets) + $workbox + @('Favicon.svg', 'favicon-icon.png', 'vite.svg', 'pwa-192x192.png', 'pwa-512x512.png', 'manifest.webmanifest', 'index.html', 'sw.js')
 foreach ($relative in $files) {
     $null = Safe-Child $source $relative
     $target = Safe-Child $destination $relative

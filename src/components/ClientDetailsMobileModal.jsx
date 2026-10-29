@@ -1,9 +1,11 @@
 import { withExportLoading } from '../utils/exportLoading'
 import BrokerCreditSummary from './BrokerCreditSummary'
+import MobileCalendar from './MobileCalendar'
+import MobileSelect from './MobileSelect'
 import { useBrokerCredit } from '../contexts/brokerCreditStore'
 import useBackToClose from '../hooks/useBackToClose'
 import { creditOperations, temporaryCreditBody } from '../utils/brokerCredit'
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import api, { brokerAPI } from '../services/api'
 import { useAuth } from '../contexts/authContextStore'
 import { exportRowsToExcel } from '../utils/exportExcel'
@@ -53,7 +55,7 @@ const _EyeIcon = ({ show, onToggle }) => (
 
 const AccessSwitch = ({ label, enabled, loading, onToggle }) => (
   <div className="flex items-center justify-between gap-4">
-    <span className="text-[13px] font-semibold text-gray-700">{label}</span>
+    <span className="text-[13px] font-medium text-[#1F2937]">{label}</span>
     <button
       type="button"
       role="switch"
@@ -129,10 +131,10 @@ const PasswordSection = ({ title, type, login }) => {
   const statusMsg = applyMsg || verifyMsg
 
   return (
-    <div className="bg-white rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.08)', border: '1px solid #E8EEF7' }}>
+    <div className="bg-transparent rounded-2xl overflow-hidden border border-[#D5DEEA]">
       {/* Section header */}
-      <div className="px-4 py-2.5 bg-[#EEF3FB] border-b border-[#D8E4F5]">
-        <p className="text-[11px] font-bold text-[#1A63BC] uppercase tracking-wider">{title}</p>
+      <div className="px-4 py-3 bg-transparent border-b border-[#D5DEEA]">
+        <p className="text-[13px] font-bold text-[#0F172A]">{title}</p>
       </div>
 
       <div className="p-4 space-y-3">
@@ -145,8 +147,8 @@ const PasswordSection = ({ title, type, login }) => {
               Generated &amp; copied to clipboard
             </p>
           )}
-          <div className="flex items-center gap-2 border-2 border-[#1A63BC] rounded-xl px-3 py-2.5 bg-white">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="text-[#1A63BC] flex-shrink-0">
+          <div className="flex h-11 items-center gap-2 border border-[#D5DEEA] rounded-xl px-3 bg-transparent focus-within:border-[#2563EB] focus-within:ring-2 focus-within:ring-blue-100">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="text-[#2563EB] flex-shrink-0">
               <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
             </svg>
             <input
@@ -154,7 +156,7 @@ const PasswordSection = ({ title, type, login }) => {
               value={pwd}
               onChange={e => handleChange(e.target.value)}
               placeholder="Enter or generate a password"
-              className="flex-1 text-[14px] text-gray-800 outline-none placeholder-gray-400 font-medium"
+              className="flex-1 min-w-0 bg-transparent text-[14px] text-[#0F172A] outline-none placeholder-gray-400 font-medium"
             />
             <_EyeIcon show={showPwd} onToggle={() => setShowPwd(s => !s)} />
           </div>
@@ -163,7 +165,7 @@ const PasswordSection = ({ title, type, login }) => {
         {/* ── Generate button ── */}
         <button
           onClick={handleGenerate}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-[#1A63BC] text-[#1A63BC] bg-blue-50 hover:bg-blue-100 active:bg-blue-200 transition-colors"
+          className="w-full h-11 flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#2563EB]/50 text-[#2563EB] bg-[#2563EB]/[0.05] active:bg-[#2563EB]/10 transition-colors"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <path d="M12 3v4M12 17v4M4.22 6.22l2.83 2.83M16.95 14.95l2.83 2.83M3 12h4M17 12h4M4.22 17.78l2.83-2.83M16.95 9.05l2.83-2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -187,7 +189,7 @@ const PasswordSection = ({ title, type, login }) => {
           <button
             onClick={handleApply}
             disabled={applying || verifying || !pwd}
-            className="py-3 rounded-xl bg-[#1A63BC] hover:bg-[#1557a8] active:bg-[#134d96] disabled:opacity-40 text-white text-[13px] font-bold transition-colors shadow-sm"
+            className="h-11 rounded-xl bg-[#2563EB] active:bg-blue-700 disabled:opacity-40 text-white text-[13px] font-semibold transition-colors shadow-[0_4px_10px_rgba(37,99,235,0.3)]"
           >
             {applying
               ? <span className="flex items-center justify-center gap-1.5"><svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4"/><path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Applying…</span>
@@ -197,7 +199,7 @@ const PasswordSection = ({ title, type, login }) => {
           <button
             onClick={handleVerify}
             disabled={verifying || applying || !pwd}
-            className="py-3 rounded-xl border-2 border-[#1A63BC] text-[#1A63BC] hover:bg-blue-50 active:bg-blue-100 disabled:opacity-40 text-[13px] font-bold transition-colors"
+            className="h-11 rounded-xl border border-[#D5DEEA] bg-transparent text-[#2563EB] active:bg-blue-50 disabled:opacity-40 text-[13px] font-semibold transition-colors"
           >
             {verifying
               ? <span className="flex items-center justify-center gap-1.5"><svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Verifying…</span>
@@ -255,13 +257,12 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
   const [dealsLoading, setDealsLoading] = useState(false)
   const [hasAppliedFilter, setHasAppliedFilter] = useState(false)
   const [quickFilter, setQuickFilter] = useState('today')
+  const [dealsDatePanelOpen, setDealsDatePanelOpen] = useState(false)
+  const [dealsDateField, setDealsDateField] = useState(null) // 'from' | 'to' | null
   const [totalDealsCount, setTotalDealsCount] = useState(0)
   const [isExportingDeals, setIsExportingDeals] = useState(false)
   const [currentDateFilter, setCurrentDateFilter] = useState({ from: 0, to: 0 })
 
-  // Refs for date inputs
-  const fromDateInputRef = useRef(null)
-  const toDateInputRef = useRef(null)
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
@@ -1648,37 +1649,37 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
     const allocTotal = (Math.abs(credit) + Math.abs(balance) + Math.abs(floating)) || Math.abs(equity) || 1
 
     return (
-      <div className="p-3 space-y-3 pb-6 bg-[#F0F4FA]">
+      <div className="px-4 pt-3 space-y-3 pb-6 bg-transparent">
 
         {/* ── Account Information ─────────────────────────────────── */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Account Information</p>
-          <div className="grid grid-cols-3 gap-y-2 gap-x-2">
+        <div className="bg-transparent rounded-2xl border border-[#D5DEEA] p-3.5">
+          <p className="text-[13px] font-bold text-[#0F172A] mb-3">Account Information</p>
+          <div className="grid grid-cols-2 gap-y-3 gap-x-3">
             {[
-              { label: 'Name', value: name },
+              { label: 'Name', value: name, wide: true },
               { label: 'Account', value: `${server ? server + ' - ' : ''}${login}` },
               { label: 'Currency', value: currency || '–' },
               { label: 'Equity', value: fmt(equity), color: equity >= 0 ? 'text-green-600' : 'text-red-600' },
               { label: 'Margin Level', value: marginLvl ? fmtPct(marginLvl) : '–', color: marginLvl >= 100 ? 'text-green-600' : 'text-red-600' },
-              { label: 'Total Commission', value: fmt(commission) },
+              { label: 'This week commission', value: fmt(commission) },
               { label: 'Last Trade', value: lastTrade },
-            ].map(({ label, value, color }) => (
-              <div key={label}>
-                <p className="text-[9px] text-gray-400 leading-tight">{label}</p>
-                <p className={`text-[11px] font-semibold truncate ${color ?? 'text-gray-800'}`}>{value}</p>
+            ].map(({ label, value, color, wide }) => (
+              <div key={label} className={`min-w-0 ${wide ? 'col-span-2' : ''}`}>
+                <p className="text-[11px] text-[#64748B] leading-tight">{label}</p>
+                <p className={`mt-0.5 text-[13px] font-semibold ${wide ? 'break-words' : 'truncate'} ${color ?? 'text-[#0F172A]'}`}>{value}</p>
               </div>
             ))}
           </div>
         </div>
 
         {/* ── Account Allocation + Volume Overview ───────────────── */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           {/* Account Allocation */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Account Allocation</p>
-            <div className="flex items-center gap-2">
+          <div className="bg-transparent rounded-2xl border border-[#D5DEEA] p-3.5">
+            <p className="text-[13px] font-bold text-[#0F172A] mb-3">Account Allocation</p>
+            <div className="flex items-center gap-4">
               <SvgDonut
-                size={80} sw={12}
+                size={96} sw={12}
                 label={fmt(equity)}
                 sublabel="Total Equity"
                 segments={[
@@ -1687,7 +1688,7 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                   { v: Math.abs(floating), color: floating >= 0 ? '#3b82f6' : '#ef4444' },
                 ]}
               />
-              <div className="flex-1 space-y-1.5 min-w-0">
+              <div className="flex-1 space-y-2.5 min-w-0">
                 {[
                   { label: 'Credit',          val: credit,   color: '#6366f1' },
                   { label: 'Balance',         val: balance,  color: '#22c55e' },
@@ -1697,10 +1698,10 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                   return (
                     <div key={label}>
                       <div className="flex justify-between items-center mb-0.5">
-                        <span className="text-[9px] text-gray-500 truncate">{label}</span>
-                        <span className={`text-[9px] font-medium ${val >= 0 ? 'text-gray-700' : 'text-red-500'}`}>{fmt(val)} ({val >= 0 ? fmtPct(pct) : `-${fmtPct(pct)}`})</span>
+                        <span className="text-[11px] text-[#64748B] truncate">{label}</span>
+                        <span className={`text-[11px] font-semibold whitespace-nowrap ${val >= 0 ? 'text-[#0F172A]' : 'text-red-500'}`}>{fmt(val)} ({val >= 0 ? fmtPct(pct) : `-${fmtPct(pct)}`})</span>
                       </div>
-                      <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-[#EEF2F7] rounded-full overflow-hidden">
                         <div className="h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: color }} />
                       </div>
                     </div>
@@ -1711,11 +1712,11 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
           </div>
 
           {/* Volume Overview */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Volume Overview</p>
-            <div className="flex flex-col items-center gap-1">
+          <div className="bg-transparent rounded-2xl border border-[#D5DEEA] p-3.5">
+            <p className="text-[13px] font-bold text-[#0F172A] mb-3">Volume Overview</p>
+            <div className="flex items-center gap-4">
               <SvgDonut
-                size={80} sw={12}
+                size={96} sw={12}
                 label={fmt(Number(ds.totalVolume ?? ds.total_volume ?? (buyVolume + sellVolume)), 2)}
                 sublabel="Total"
                 segments={
@@ -1724,14 +1725,14 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                     : [{ v: Number(ds.totalVolume ?? ds.total_volume ?? 1), color: '#3b82f6' }]
                 }
               />
-              <div className="flex items-center gap-3 text-[9px]">
+              <div className="flex flex-1 flex-col gap-2 text-[12px]">
                 <div className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
-                  <span className="text-gray-600">Buy <span className="font-semibold text-gray-800">{fmt(buyVolume)}</span></span>
+                  <span className="text-[#64748B]">Buy <span className="font-semibold text-[#0F172A]">{fmt(buyVolume)}</span></span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-                  <span className="text-gray-600">Sell <span className="font-semibold text-gray-800">{fmt(sellVolume)}</span></span>
+                  <span className="text-[#64748B]">Sell <span className="font-semibold text-[#0F172A]">{fmt(sellVolume)}</span></span>
                 </div>
               </div>
             </div>
@@ -1739,13 +1740,13 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
         </div>
 
         {/* ── Profit Trend ──────────────────────────────────────── */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
+        <div className="bg-transparent rounded-2xl border border-[#D5DEEA] p-3.5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Profit Trend</p>
+            <p className="text-[13px] font-bold text-[#0F172A]">Profit Trend</p>
             <div className="flex items-center gap-1">
               {['7d', '30d'].map(r => (
                 <button key={r} onClick={() => setTrendRange(r)}
-                  className={`px-2 py-0.5 rounded text-[9px] font-medium transition-colors ${trendRange === r ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                  className={`h-7 px-2.5 rounded-lg border text-[11px] font-semibold transition-colors ${trendRange === r ? 'bg-[#2563EB] border-[#2563EB] text-white' : 'bg-transparent border-[#D5DEEA] text-[#475569]'}`}>
                   {r === '7d' ? 'This Week' : 'This Month'}
                 </button>
               ))}
@@ -1760,7 +1761,7 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
               <SvgLine data={profitTrend} w={260} h={70} hoverIdx={trendHoverIdx} setHoverIdx={setTrendHoverIdx} />
               <div className="flex justify-between mt-1">
                 {profitTrend.filter((_, i) => i % Math.max(1, Math.floor(profitTrend.length / 5)) === 0).map((d, i) => (
-                  <span key={i} className="text-[8px] text-gray-400">{d.label}</span>
+                  <span key={i} className="text-[10px] text-[#94A3B8]">{d.label}</span>
                 ))}
               </div>
             </>
@@ -1768,8 +1769,8 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
         </div>
 
         {/* ── Margin Usage ──────────────────────────────────────── */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Margin Usage</p>
+        <div className="bg-transparent rounded-2xl border border-[#D5DEEA] p-3.5">
+          <p className="text-[13px] font-bold text-[#0F172A] mb-3">Margin Usage</p>
           {(() => {
             const usedPct = margin + marginFree > 0 ? (margin / (margin + marginFree)) * 100 : 0
             const freePct = 100 - usedPct
@@ -1790,7 +1791,7 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                     { label: 'Free Margin', val: marginFree, pct: freePct, color: 'bg-green-500', text: 'text-green-600' },
                   ].map(({ label, val, pct, color, text }) => (
                     <div key={label}>
-                      <div className="flex justify-between text-[9px] mb-0.5">
+                      <div className="flex justify-between text-[11px] mb-1">
                         <div className="flex items-center gap-1">
                           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color}`} />
                           <span className="text-gray-500">{label}</span>
@@ -1809,8 +1810,8 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
         </div>
 
         {/* ── Deals Summary ──────────────────────────────────────── */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Deals Summary</p>
+        <div className="bg-transparent rounded-2xl border border-[#D5DEEA] p-3.5">
+          <p className="text-[13px] font-bold text-[#0F172A] mb-3">Deals Summary</p>
           <div className="flex items-center gap-3">
             <SvgDonut
               size={90} sw={14}
@@ -1824,13 +1825,13 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
             <div className="flex-1 space-y-1.5">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
-                <span className="text-[9px] text-gray-500">Profitable Deals</span>
-                <span className="ml-auto text-[10px] font-bold text-green-600">{profitableDeals}</span>
+                <span className="text-[11px] text-[#64748B]">Profitable Deals</span>
+                <span className="ml-auto text-[12px] font-bold text-green-600">{profitableDeals}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
-                <span className="text-[9px] text-gray-500">Losing Deals</span>
-                <span className="ml-auto text-[10px] font-bold text-red-600">{losingDeals}</span>
+                <span className="text-[11px] text-[#64748B]">Losing Deals</span>
+                <span className="ml-auto text-[12px] font-bold text-red-600">{losingDeals}</span>
               </div>
               <div className="h-px bg-gray-100 my-1" />
               <div className="grid grid-cols-2 gap-1">
@@ -1848,8 +1849,8 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
         </div>
 
         {/* ── Performance Overview ──────────────────────────────── */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Performance Overview</p>
+        <div className="bg-transparent rounded-2xl border border-[#D5DEEA] p-3.5">
+          <p className="text-[13px] font-bold text-[#0F172A] mb-3">Performance Overview</p>
           <div className="grid grid-cols-2 gap-2">
             {[
               { label: 'Avg Profit / Deal', val: avgProfit,  color: 'text-green-600', bg: 'bg-green-50' },
@@ -1858,7 +1859,7 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
               { label: 'Max Loss',          val: maxLoss,    color: 'text-red-700',   bg: 'bg-red-50'   },
             ].map(({ label, val, color, bg }) => (
               <div key={label} className={`${bg} rounded-lg p-2`}>
-                <p className="text-[9px] text-gray-500 mb-0.5">{label}</p>
+                <p className="text-[11px] text-[#64748B] mb-0.5">{label}</p>
                 <p className={`text-[12px] font-bold ${color}`}>{fmt(val)}</p>
               </div>
             ))}
@@ -1866,8 +1867,8 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
         </div>
 
         {/* ── Profitability ──────────────────────────────────────── */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Profitability</p>
+        <div className="bg-transparent rounded-2xl border border-[#D5DEEA] p-3.5">
+          <p className="text-[13px] font-bold text-[#0F172A] mb-3">Profitability</p>
           <div className="flex items-center gap-3">
             {/* Semi-circle gauge */}
             <div className="relative flex-shrink-0">
@@ -2272,36 +2273,35 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
           }
         }
       `}</style>
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-end lg:hidden">
+      <div className="fixed inset-0 z-50 flex flex-col justify-end bg-[#0F172A]/40 lg:hidden">
+        {/* tap the dimmed area above the sheet to close */}
+        <div className="min-h-[12dvh] flex-1" onClick={onClose} aria-hidden="true" />
 
-        <div className="bg-white w-full h-[93vh] rounded-t-2xl flex flex-col overflow-hidden">
+        <div className="bg-white w-full h-[82dvh] rounded-t-[24px] flex flex-col overflow-hidden shadow-[0_-10px_30px_rgba(15,23,42,0.18)]">
 
-        {/* ── Top bar ─────────────────────────────────────────────── */}
-        <div className="bg-[#4285F4] flex-shrink-0">
-          <div className="flex items-center justify-between px-4 py-3.5">
-            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <path d="M19 12H5M12 5l-7 7 7 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            <div className="w-8" />
-          </div>
-        </div>
+        <div className="flex justify-center pt-2 flex-shrink-0"><span className="w-10 h-1 rounded-full bg-[#CBD5E1]" /></div>
+
+        {/* ── Grab handle ──────────────────────────────────────────── */}
 
         {/* ── Client card ─────────────────────────────────────────── */}
-        <div className="bg-white px-4 pt-4 pb-3 flex-shrink-0 border-b border-gray-100 shadow-sm">
+        <div className="bg-transparent px-4 pt-3 pb-3 flex-shrink-0 border-b border-[#D5DEEA]">
           <div className="flex items-center gap-3">
-            {/* Blue circle avatar */}
-            <div className="w-14 h-14 rounded-full bg-[#4285F4] flex items-center justify-center flex-shrink-0 shadow-md">
-              <span className="text-[22px] font-bold text-white">
+            <button onClick={onClose} aria-label="Back" className="w-10 h-10 flex-shrink-0 rounded-xl border border-[#D5DEEA] bg-transparent flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M19 12H5M12 5l-7 7 7 7" stroke="#0F172A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            {/* Avatar */}
+            <div className="w-11 h-11 rounded-2xl bg-[#2563EB] flex items-center justify-center flex-shrink-0 shadow-[0_4px_10px_rgba(37,99,235,0.3)]">
+              <span className="text-[20px] font-bold text-white">
                 {(clientData.name || client.name || client.fullName || String(client.login || 'U'))[0].toUpperCase()}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-[18px] font-extrabold text-gray-900 leading-tight truncate">
+              <h3 className="text-[18px] font-extrabold tracking-tight text-[#0F172A] leading-tight truncate">
                 {clientData.name || client.name || client.fullName || String(client.login || '')}
               </h3>
-              <p className="text-[13px] text-gray-500 mt-0.5 font-medium">
+              <p className="text-[12px] text-[#64748B] mt-0.5 font-medium">
                 {client.login}{(clientData.currency || client.currency) ? ` • ${clientData.currency || client.currency}` : ''}
               </p>
             </div>
@@ -2323,16 +2323,16 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                   <button
                     key={tab.key}
                     onClick={() => setActiveTab(tab.key)}
-                    className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all inline-flex items-center gap-1.5 ${
+                    className={`whitespace-nowrap h-9 px-3.5 rounded-xl border text-[12px] font-semibold transition-all inline-flex items-center gap-1.5 ${
                       isActive
-                        ? 'bg-[#4285F4] text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        ? 'bg-[#2563EB] border-[#2563EB] text-white shadow-[0_4px_10px_rgba(37,99,235,0.3)]'
+                        : 'bg-transparent border-[#D5DEEA] text-[#1F2937]'
                     }`}
                   >
                     {tab.label}
                     {tab.count != null && (
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                        isActive ? 'bg-white/25 text-white' : 'bg-white text-gray-600'
+                      <span className={`text-[12px] font-bold px-1.5 py-0.5 rounded-full ${
+                        isActive ? 'bg-white/25 text-white' : 'bg-[#2563EB]/10 text-[#2563EB]'
                       }`}>{tab.count}</span>
                     )}
                   </button>
@@ -2344,10 +2344,10 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
 
         {/* Search */}
         {(activeTab === 'positions' || activeTab === 'deals') && (
-        <div className="px-4 py-3 bg-white border-b border-gray-200 flex-shrink-0">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="flex-1 min-w-0 h-[28px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] flex items-center px-2 gap-1">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
+        <div className="px-4 pt-3 pb-2 bg-white flex-shrink-0">
+          <div className="flex items-center gap-1.5">
+            <div className="flex-1 min-w-0 h-10 bg-transparent border border-[#D5DEEA] rounded-xl flex items-center px-3 gap-2">
+              <svg width="15" height="15" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
                 <circle cx="6" cy="6" r="4" stroke="#9CA3AF" strokeWidth="1.5"/>
                 <path d="M9 9L12 12" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
@@ -2360,14 +2360,14 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                   else if (activeTab === 'deals') setDealsSearch(value)
                   setCurrentPage(1)
                 }}
-                placeholder="Search"
-                className="flex-1 min-w-0 text-[11px] text-[#000000] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit"
+                placeholder="Search by symbol..."
+                className="flex-1 min-w-0 text-[13px] text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit"
               />
             </div>
             {/* Column Selector Button */}
             <button
               onClick={() => setShowColumnSelector(!showColumnSelector)}
-              className="w-[28px] h-[28px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50"
+              className="w-10 h-10 bg-transparent border border-[#D5DEEA] rounded-xl flex items-center justify-center transition-colors flex-shrink-0"
               title="Select Columns"
             >
               <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
@@ -2381,7 +2381,7 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
             <button
               onClick={activeTab === 'positions' ? handleExportPositions : handleExportDeals}
               disabled={activeTab === 'deals' && isExportingDeals}
-              className="w-[28px] h-[28px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-10 h-10 bg-transparent border border-[#D5DEEA] rounded-xl flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Export to CSV"
             >
               {activeTab === 'deals' && isExportingDeals ? (
@@ -2402,14 +2402,14 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                 <button
                   onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
-                  className="w-[28px] h-[28px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-9 h-10 bg-transparent border border-[#D5DEEA] rounded-xl flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
                     <path d="M12 14L8 10L12 6" stroke="#4B4B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>
-                <span className="text-[10px] font-semibold text-[#000000] font-outfit">
-                  {`${currentPage} / ${Math.ceil(totalDealsCount / itemsPerPage)}`}
+                <span className="px-0.5 text-[12px] font-semibold text-[#475569] font-outfit whitespace-nowrap">
+                  {`${currentPage} / ${Math.max(1, Math.ceil(totalDealsCount / itemsPerPage))}`}
                 </span>
                 <button
                   onClick={() => setCurrentPage(prev => {
@@ -2417,7 +2417,7 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                     return prev < maxPage ? prev + 1 : prev
                   })}
                   disabled={currentPage >= Math.ceil(totalDealsCount / itemsPerPage)}
-                  className="w-[28px] h-[28px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-9 h-10 bg-transparent border border-[#D5DEEA] rounded-xl flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
                     <path d="M8 6L12 10L8 14" stroke="#4B4B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2429,99 +2429,81 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
         </div>
         )}
 
-        {/* Date Filter for Deals Tab - Single Row Compact Design */}
+        {/* Date Filter for Deals Tab: range button (themed calendar), period sheet and Apply */}
         {activeTab === 'deals' && (
-          <div className="px-2 py-1.5 bg-blue-50 border-b border-blue-100 flex-shrink-0">
-            <div className="flex items-center gap-1.5" style={{ justifyContent: 'space-between' }}>
-              {/* Date Inputs */}
-              <div 
-                style={{ width: '95px', flex: '0 0 95px', position: 'relative' }}
-                onClick={() => fromDateInputRef.current?.showPicker?.()}
-              >
-                <input
-                  ref={fromDateInputRef}
-                  type="date"
-                  value={fromDate ? formatDateToValue(fromDate) : ''}
-                  onChange={(e) => {
-                    const dateValue = e.target.value
-                    if (dateValue) {
-                      const [year, month, day] = dateValue.split('-')
-                      setFromDate(`${day}/${month}/${year.slice(-2)}`)
-                    } else {
-                      setFromDate('')
-                    }
-                  }}
-                  className="mobile-date-picker absolute inset-0 opacity-0 cursor-pointer"
-                  style={{ width: '100%', height: '100%', zIndex: 10 }}
-                />
-                <div className="w-full border border-gray-300 rounded text-gray-900 bg-white px-1 py-0.5 flex items-center justify-between cursor-pointer" style={{ fontSize: '10px', height: '24px' }}>
-                  <span>{fromDate || 'dd/mm/yy'}</span>
-                  <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-              </div>
-              <span className="text-[12px] text-gray-500 font-medium" style={{ flex: '0 0 auto' }}>to</span>
-              <div 
-                style={{ width: '95px', flex: '0 0 95px', position: 'relative' }}
-                onClick={() => toDateInputRef.current?.showPicker?.()}
-              >
-                <input
-                  ref={toDateInputRef}
-                  type="date"
-                  value={toDate ? formatDateToValue(toDate) : ''}
-                  onChange={(e) => {
-                    const dateValue = e.target.value
-                    if (dateValue) {
-                      const [year, month, day] = dateValue.split('-')
-                      setToDate(`${day}/${month}/${year.slice(-2)}`)
-                    } else {
-                      setToDate('')
-                    }
-                  }}
-                  className="mobile-date-picker absolute inset-0 opacity-0 cursor-pointer"
-                  style={{ width: '100%', height: '100%', zIndex: 10 }}
-                />
-                <div className="w-full border border-gray-300 rounded text-gray-900 bg-white px-1 py-0.5 flex items-center justify-between cursor-pointer" style={{ fontSize: '10px', height: '24px' }}>
-                  <span>{toDate || 'dd/mm/yy'}</span>
-                  <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Quick Filter Dropdown */}
-              <select
-                value={quickFilter}
-                onChange={(e) => handleQuickFilter(e.target.value)}
-                className="px-1.5 py-0.5 border border-blue-300 rounded text-[10px] font-medium text-blue-700 bg-white"
-                style={{ height: '24px', fontSize: '10px', width: '98px', flex: '0 0 98px' }}
-              >
-                <option value="">Quick Filters</option>
-                <option value="today">Today</option>
-                <option value="lastweek">Last Week</option>
-                <option value="lastmonth">Last Month</option>
-                <option value="last3months">Last 3 Months</option>
-                <option value="last6months">Last 6 Months</option>
-                <option value="allhistory">All History</option>
-              </select>
-
-              {/* Action Buttons */}
+          <div className="relative px-4 pb-3 bg-white border-b border-[#D5DEEA] flex-shrink-0">
+            <div className="flex items-center gap-1.5">
               <button
+                type="button"
+                onClick={() => { setDealsDateField(null); setDealsDatePanelOpen(open => !open) }}
+                aria-expanded={dealsDatePanelOpen}
+                className="h-10 min-w-0 flex-1 px-3 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center gap-2 text-left"
+              >
+                <svg className="w-4 h-4 flex-shrink-0 text-[#2563EB]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></svg>
+                <span className={`min-w-0 truncate text-[12px] font-semibold ${fromDate || toDate ? 'text-[#0F172A]' : 'text-[#9CA3AF]'}`}>{fromDate || toDate ? `${fromDate || '…'} – ${toDate || '…'}` : 'Select dates'}</span>
+              </button>
+              <MobileSelect ariaLabel="Quick filters" title="Quick filters" className="w-[104px] shrink-0 !px-2.5 !text-[12px] !font-semibold" value={quickFilter}
+                placeholder="Period"
+                onChange={value => handleQuickFilter(value)}
+                options={[{ value: 'today', label: 'Today' }, { value: 'lastweek', label: 'Last Week' }, { value: 'lastmonth', label: 'Last Month' }, { value: 'last3months', label: 'Last 3 Months' }, { value: 'last6months', label: 'Last 6 Months' }, { value: 'allhistory', label: 'All History' }]} />
+              <button
+                type="button"
                 onClick={handleApplyDateFilter}
-                className="px-3 py-0.5 bg-blue-600 text-white text-[9px] font-medium rounded hover:bg-blue-700"
-                style={{ height: '24px', flex: '0 0 auto', whiteSpace: 'nowrap' }}
+                className="h-10 px-4 shrink-0 rounded-xl bg-[#2563EB] text-white text-[13px] font-semibold shadow-[0_4px_10px_rgba(37,99,235,0.3)]"
               >
                 Apply
               </button>
-              <button
-                onClick={handleClearDateFilter}
-                className="px-3 py-0.5 bg-white border border-gray-300 text-gray-700 text-[9px] font-medium rounded hover:bg-gray-50"
-                style={{ height: '24px', flex: '0 0 auto', whiteSpace: 'nowrap' }}
-              >
-                Clear
-              </button>
             </div>
+            {dealsDatePanelOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setDealsDatePanelOpen(false)} />
+                <div className="absolute left-4 right-4 top-full z-50 mt-1 rounded-xl border border-[#D5DEEA] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.18)]">
+                  <p className="text-[14px] font-extrabold tracking-tight text-[#0F172A]">Custom date range</p>
+                  <p className="mt-0.5 text-[11px] text-[#64748B]">Pick the period, then tap Apply.</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {[['from', 'From', fromDate], ['to', 'To', toDate]].map(([key, label, value]) => (
+                      <button key={key} type="button" onClick={() => setDealsDateField(field => field === key ? null : key)}
+                        className={`rounded-lg border px-2.5 py-1.5 text-left ${dealsDateField === key ? 'border-[#2563EB] bg-[#2563EB]/[0.06]' : 'border-[#D5DEEA] bg-white'}`}>
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">{label}</span>
+                        <span className="mt-0.5 flex items-center gap-1.5">
+                          <svg className={`h-3.5 w-3.5 shrink-0 ${dealsDateField === key || value ? 'text-[#2563EB]' : 'text-[#94A3B8]'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></svg>
+                          <span className={`min-w-0 truncate text-[13px] font-semibold ${value ? 'text-[#0F172A]' : 'text-[#9CA3AF]'}`}>{value || 'Select date'}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {dealsDateField && (
+                    <div className="mt-2 rounded-lg border border-[#D5DEEA] bg-white p-2">
+                      <MobileCalendar
+                        key={dealsDateField}
+                        value={formatDateToValue(dealsDateField === 'from' ? fromDate : toDate)}
+                        min={dealsDateField === 'to' ? formatDateToValue(fromDate) || undefined : undefined}
+                        max={dealsDateField === 'from' ? formatDateToValue(toDate) || undefined : undefined}
+                        rangeStart={formatDateToValue(fromDate)}
+                        rangeEnd={formatDateToValue(toDate)}
+                        onChange={iso => {
+                          // MobileCalendar works in YYYY-MM-DD; this tab stores dd/mm/yy
+                          const [year, month, day] = iso.split('-')
+                          const display = `${day}/${month}/${year.slice(-2)}`
+                          if (dealsDateField === 'from') {
+                            setFromDate(display)
+                            if (toDate && formatDateToValue(toDate) < iso) setToDate('')
+                            setDealsDateField('to')
+                          } else {
+                            setToDate(display)
+                            setDealsDateField(null)
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className="mt-4 flex items-center gap-2">
+                    <button type="button" onClick={() => { handleClearDateFilter(); setDealsDateField(null) }} className="h-10 flex-1 rounded-lg border border-[#D5DEEA] bg-transparent text-[13px] font-semibold text-[#334155]">Clear</button>
+                    <button type="button" onClick={() => { setDealsDatePanelOpen(false); handleApplyDateFilter() }} className="h-9 flex-1 rounded-lg bg-[#2563EB] text-[13px] font-semibold text-white shadow-[0_4px_10px_rgba(37,99,235,0.3)]">Apply dates</button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -2536,7 +2518,7 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             </div>
           ) : (
-            <div className="bg-white relative min-w-full">
+            <div className="bg-transparent relative min-w-full">
               {activeTab === 'overview' && renderOverview()}
               {activeTab === 'positions' && renderPositions()}
               {activeTab === 'deals' && renderDeals()}
@@ -2544,8 +2526,8 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
               {/* Money Transactions Tab */}
               {activeTab === 'funds' && (
                 <div className="p-4">
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Money Transactions</h3>
+                  <div className="bg-transparent rounded-2xl p-4 border border-[#D5DEEA]">
+                    <h3 className="text-[14px] font-bold text-[#0F172A] mb-3">Money Transactions</h3>
 
                     {operationSuccess && (
                       <div className="mb-3 bg-green-50 border-l-4 border-green-500 rounded-r p-2">
@@ -2574,24 +2556,23 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                   {creditInUnavailable && <p role="status" className="text-xs text-amber-700">Credit In is unavailable while credit data cannot be verified.</p>}
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Operation Type</label>
-                        <select
+                        <label className="block text-[12px] font-medium text-[#64748B] mb-1">Operation Type</label>
+                        <MobileSelect
+                          ariaLabel="Operation Type"
+                          title="Operation Type"
+                          className="w-full"
                           value={operationType}
-                          onChange={(e) => {
-                            setOperationType(e.target.value)
+                          onChange={(value) => {
+                            setOperationType(value)
                             setOperationSuccess('')
                             setOperationError('')
                           }}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900"
-                        >
-                          {availableOperationTypes.map(op => (
-                            <option key={op.value} value={op.value}>{op.label}</option>
-                          ))}
-                        </select>
+                          options={availableOperationTypes.map(op => ({ value: op.value, label: op.label }))}
+                        />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Amount ($)</label>
+                        <label className="block text-[12px] font-medium text-[#64748B] mb-1">Amount ($)</label>
                         <input
                           type="number"
                           step="0.01"
@@ -2599,23 +2580,23 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                           value={amount}
                           onChange={(e) => setAmount(e.target.value)}
                           placeholder="Enter amount"
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 placeholder-gray-400"
+                          className="w-full h-10 px-3 border border-[#D5DEEA] rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-[#2563EB] text-[13px] bg-transparent text-[#0F172A] placeholder-gray-400 outline-none"
                           required
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Comment (Optional)</label>
+                        <label className="block text-[12px] font-medium text-[#64748B] mb-1">Comment (Optional)</label>
                         <textarea
                           value={comment}
                           onChange={(e) => setComment(e.target.value)}
                           placeholder="Add a comment"
                           rows="2"
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 placeholder-gray-400 resize-none"
+                          className="w-full px-3 py-2.5 border border-[#D5DEEA] rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-[#2563EB] text-[13px] bg-transparent text-[#0F172A] placeholder-gray-400 resize-none outline-none"
                         />
                       </div>
 
-                      <div className="flex justify-end gap-2 pt-1">
+                      <div className="grid grid-cols-2 gap-2 pt-1">
                         <button
                           type="button"
                           onClick={() => {
@@ -2624,14 +2605,14 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                             setOperationSuccess('')
                             setOperationError('')
                           }}
-                          className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                          className="h-10 text-[13px] font-semibold text-[#334155] bg-transparent border border-[#D5DEEA] rounded-xl"
                         >
                           Clear
                         </button>
                         <button
                           type="submit"
                           disabled={operationLoading || creditInUnavailable || !availableOperationTypes.length}
-                          className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-md hover:from-blue-700 hover:to-blue-800 disabled:from-blue-400 disabled:to-blue-400 inline-flex items-center gap-1.5"
+                          className="h-10 text-[13px] font-semibold text-white bg-[#2563EB] rounded-xl disabled:opacity-50 inline-flex items-center justify-center gap-1.5 shadow-[0_4px_10px_rgba(37,99,235,0.3)]"
                         >
                           {operationLoading ? (
                             <>
@@ -2664,17 +2645,17 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                       <p className="text-sm text-gray-500 mt-2">Loading rules...</p>
                     </div>
                   ) : (
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="bg-transparent rounded-2xl border border-[#D5DEEA] overflow-hidden">
                       <div className="overflow-x-auto">
                         <table className="w-full">
-                          <thead className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
+                          <thead className="bg-blue-500">
                             <tr>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Rule</th>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Time</th>
-                              <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Toggle</th>
+                              <th className="px-3 h-9 text-left text-[11px] font-semibold text-white">Rule</th>
+                              <th className="px-3 h-9 text-left text-[11px] font-semibold text-white">Time</th>
+                              <th className="px-3 h-9 text-center text-[11px] font-semibold text-white">Toggle</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-200">
+                          <tbody className="divide-y divide-[#E1E1E1]">
                             {availableRules.filter(r => r.is_active).map((rule) => {
                               const clientRule = clientRules.find(cr => cr.rule_code === rule.rule_code)
                               const isApplied = clientRule && clientRule.is_active === true
@@ -2683,14 +2664,14 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                               const currentTimeParam = clientRule?.time_parameter || ''
 
                               return (
-                                <tr key={rule.id} className="bg-white hover:bg-gray-50">
-                                  <td className="px-3 py-2 text-xs text-gray-900 font-medium">{rule.rule_name}</td>
+                                <tr key={rule.id} className="bg-transparent">
+                                  <td className="px-3 h-11 text-[12px] text-[#0F172A] font-medium">{rule.rule_name}</td>
                                   <td className="px-3 py-2">
                                     {requiresTimeParam ? (
                                       <select
                                         value={selectedTimeParam[rule.rule_code] || currentTimeParam || ''}
                                         onChange={(e) => setSelectedTimeParam(prev => ({ ...prev, [rule.rule_code]: e.target.value }))}
-                                        className="px-2 py-1 text-xs border border-gray-300 rounded-md bg-white text-gray-900 w-full"
+                                        className="h-8 px-2 text-[12px] border border-[#D5DEEA] rounded-lg bg-transparent text-[#0F172A] w-full"
                                       >
                                         <option value="">Select</option>
                                         {timeOptions.map((time) => (
@@ -2707,7 +2688,7 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                                         onClick={() => isApplied ? handleRemoveRule(rule.rule_code) : handleApplyRule(rule)}
                                         disabled={rulesLoading}
                                         className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                                          isApplied ? 'bg-blue-600' : 'bg-gray-300'
+                                          isApplied ? 'bg-[#2563EB]' : 'bg-gray-300'
                                         }`}
                                       >
                                         <span
@@ -2733,9 +2714,9 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
               {activeTab === 'security' && (
                 <div className="flex flex-col h-full">
                   {/* ── Account Permissions & Trading Access ── */}
-                  <div className="mx-4 mt-4 bg-white rounded-xl overflow-hidden flex-shrink-0" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.08)', border: '1px solid #E8EEF7' }}>
-                    <div className="px-4 py-2.5 bg-[#EEF3FB] border-b border-[#D8E4F5]">
-                      <p className="text-[11px] font-bold text-[#1A63BC] uppercase tracking-wider">Account Access</p>
+                  <div className="mx-4 mt-4 bg-transparent rounded-2xl overflow-hidden flex-shrink-0 border border-[#D5DEEA]">
+                    <div className="px-4 py-3 bg-transparent border-b border-[#D5DEEA]">
+                      <p className="text-[13px] font-bold text-[#0F172A]">Account Access</p>
                     </div>
                     <div className="px-4 py-3 space-y-3">
                       <AccessSwitch label="Account Permissions" enabled={accountEnabled} loading={accountToggleLoading} onToggle={handleAccountToggle} />
@@ -2756,18 +2737,18 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                   <div className="flex gap-2 px-4 pt-4 pb-2 flex-shrink-0">
                     <button
                       onClick={() => setSecurityTab('trading')}
-                      className={`flex-1 py-2 rounded-xl text-[12px] font-semibold transition-all ${
+                      className={`flex-1 h-10 rounded-xl border text-[13px] font-semibold transition-all ${
                         securityTab === 'trading'
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          ? 'bg-[#2563EB] border-[#2563EB] text-white shadow-[0_4px_10px_rgba(37,99,235,0.3)]'
+                          : 'bg-transparent border-[#D5DEEA] text-[#1F2937]'
                       }`}
                     >Trading</button>
                     <button
                       onClick={() => setSecurityTab('investor')}
-                      className={`flex-1 py-2 rounded-xl text-[12px] font-semibold transition-all ${
+                      className={`flex-1 h-10 rounded-xl border text-[13px] font-semibold transition-all ${
                         securityTab === 'investor'
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          ? 'bg-[#2563EB] border-[#2563EB] text-white shadow-[0_4px_10px_rgba(37,99,235,0.3)]'
+                          : 'bg-transparent border-[#D5DEEA] text-[#1F2937]'
                       }`}
                     >Investor</button>
                   </div>
@@ -2788,32 +2769,32 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
 
         {/* Summary Cards - Positions tab */}
         {activeTab === 'positions' && (
-          <div className="px-4 py-3 bg-white border-t border-gray-200 flex-shrink-0">
+          <div className="px-4 py-3 bg-white border-t border-[#D5DEEA] flex-shrink-0">
             <div className="grid grid-cols-3 gap-2">
-              <div className="bg-gray-50 rounded-lg p-2">
-                <p className="text-[10px] text-gray-500 uppercase font-semibold">Balance</p>
-                <p className="text-sm font-bold text-gray-900 truncate">{formatNum(stats.balance)}</p>
+              <div className="bg-transparent border border-[#D5DEEA] rounded-xl px-2.5 py-2">
+                <p className="text-[10px] text-[#64748B] font-medium">Balance</p>
+                <p className="text-[13px] font-bold text-[#0F172A] truncate">{formatNum(stats.balance)}</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-2">
-                <p className="text-[10px] text-gray-500 uppercase font-semibold">Credit</p>
-                <p className="text-sm font-bold text-gray-900 truncate">{formatNum(stats.credit)}</p>
+              <div className="bg-transparent border border-[#D5DEEA] rounded-xl px-2.5 py-2">
+                <p className="text-[10px] text-[#64748B] font-medium">Credit</p>
+                <p className="text-[13px] font-bold text-[#0F172A] truncate">{formatNum(stats.credit)}</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-2">
-                <p className="text-[10px] text-gray-500 uppercase font-semibold">Equity</p>
-                <p className="text-sm font-bold text-gray-900 truncate">{formatNum(stats.equity)}</p>
+              <div className="bg-transparent border border-[#D5DEEA] rounded-xl px-2.5 py-2">
+                <p className="text-[10px] text-[#64748B] font-medium">Equity</p>
+                <p className="text-[13px] font-bold text-[#0F172A] truncate">{formatNum(stats.equity)}</p>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2 mt-2">
-              <div className="bg-gray-50 rounded-lg p-2">
-                <p className="text-[10px] text-gray-500 uppercase font-semibold">Margin</p>
-                <p className="text-sm font-bold text-gray-900 truncate">{formatNum(stats.margin)}</p>
+              <div className="bg-transparent border border-[#D5DEEA] rounded-xl px-2.5 py-2">
+                <p className="text-[10px] text-[#64748B] font-medium">Margin</p>
+                <p className="text-[13px] font-bold text-[#0F172A] truncate">{formatNum(stats.margin)}</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-2">
-                <p className="text-[10px] text-gray-500 uppercase font-semibold">Free Margin</p>
-                <p className="text-sm font-bold text-gray-900 truncate">{formatNum(stats.marginFree)}</p>
+              <div className="bg-transparent border border-[#D5DEEA] rounded-xl px-2.5 py-2">
+                <p className="text-[10px] text-[#64748B] font-medium">Free Margin</p>
+                <p className="text-[13px] font-bold text-[#0F172A] truncate">{formatNum(stats.marginFree)}</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-2">
-                <p className="text-[10px] text-gray-500 uppercase font-semibold">Margin Level</p>
+              <div className="bg-transparent border border-[#D5DEEA] rounded-xl px-2.5 py-2">
+                <p className="text-[10px] text-[#64748B] font-medium">Margin Level</p>
                 <p className={`text-sm font-bold truncate ${stats.marginLevel >= 100 ? 'text-green-600' : stats.marginLevel > 0 ? 'text-orange-500' : 'text-gray-900'}`}>
                   {stats.marginLevel > 0 ? `${Number(stats.marginLevel).toFixed(1)}%` : '–'}
                 </p>
@@ -2827,13 +2808,14 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
         {showColumnSelector && (activeTab === 'positions' || activeTab === 'deals') && (
           <>
             <div className="fixed inset-0 bg-transparent z-40" onClick={() => setShowColumnSelector(false)} />
-            <div className="absolute top-[118px] right-[58px] bg-white rounded-lg shadow-xl border border-blue-500 z-50 w-56">
+            <div className="absolute top-[118px] right-[58px] bg-white rounded-2xl shadow-[0_10px_30px_rgba(15,23,42,0.16)] border border-[#D5DEEA] z-50 w-60 overflow-hidden">
               {/* Header */}
-              <div className="px-4 py-2.5 bg-blue-500 rounded-t-lg flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white">Show/Hide Columns</h3>
+              <div className="px-4 py-3 bg-white border-b border-[#D5DEEA] flex items-center justify-between">
+                <h3 className="text-[14px] font-bold text-[#0F172A]">Columns</h3>
                 <button
                   onClick={() => setShowColumnSelector(false)}
-                  className="text-white hover:text-blue-100 transition-colors"
+                  aria-label="Close"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D5DEEA] text-[#0F172A]"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2842,7 +2824,7 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
               </div>
 
               {/* Column List */}
-              <div className="p-2 max-h-80 overflow-y-auto bg-white rounded-b-lg">
+              <div className="p-2 max-h-80 overflow-y-auto bg-white">
                 {activeTab === 'positions' && (
                   <div className="space-y-0.5">
                     {Object.entries({
@@ -2853,12 +2835,12 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                       priceOpen: 'Open Price',
                       profit: 'Profit'
                     }).map(([key, label]) => (
-                      <div key={key} className="flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 rounded-md transition-colors">
-                        <span className="text-sm text-gray-700 font-medium">{label}</span>
+                      <div key={key} className="flex items-center justify-between px-3 py-2.5 rounded-xl active:bg-blue-50 transition-colors">
+                        <span className="text-[13px] text-[#1F2937] font-medium">{label}</span>
                         <button
                           onClick={() => setPositionColumns(prev => ({ ...prev, [key]: !prev[key] }))}
                           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                            positionColumns[key] ? 'bg-blue-500' : 'bg-gray-300'
+                            positionColumns[key] ? 'bg-[#2563EB]' : 'bg-gray-300'
                           }`}
                         >
                           <span
@@ -2888,12 +2870,12 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
                       profit: 'Profit',
                       comment: 'Comment'
                     }).map(([key, label]) => (
-                      <div key={key} className="flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 rounded-md transition-colors">
-                        <span className="text-sm text-gray-700 font-medium">{label}</span>
+                      <div key={key} className="flex items-center justify-between px-3 py-2.5 rounded-xl active:bg-blue-50 transition-colors">
+                        <span className="text-[13px] text-[#1F2937] font-medium">{label}</span>
                         <button
                           onClick={() => setDealColumns(prev => ({ ...prev, [key]: !prev[key] }))}
                           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                            dealColumns[key] ? 'bg-blue-500' : 'bg-gray-300'
+                            dealColumns[key] ? 'bg-[#2563EB]' : 'bg-gray-300'
                           }`}
                         >
                           <span

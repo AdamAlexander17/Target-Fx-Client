@@ -1273,7 +1273,8 @@ export default function ClientDashboardDesignC() {
               <circle cx="8" cy="8" r="6.5" stroke="#4B4B4B" strokeWidth="1.5"/>
               <path d="M13 13L16 16" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
-            <input 
+            <input
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')} 
               placeholder="Search" 
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}

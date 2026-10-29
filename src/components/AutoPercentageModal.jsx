@@ -115,17 +115,17 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-2 sm:p-4">
-      <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-blue-600 border-b border-blue-700">
+    <div className="fixed inset-0 bg-black/30 max-lg:bg-black/40 z-50 flex items-center justify-center p-2 sm:p-4 max-lg:items-end max-lg:p-0 max-lg:sm:p-0">
+      <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh] max-lg:max-h-[88dvh] max-lg:rounded-t-[28px] max-lg:rounded-b-none max-lg:border-0 max-lg:max-w-none max-lg:shadow-[0_-8px_30px_rgba(15,23,42,0.12)]">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 bg-blue-600 border-b border-blue-700 max-lg:bg-transparent max-lg:border-b max-lg:border-[#D5DEEA] max-lg:rounded-none max-lg:px-5 max-lg:pt-5 max-lg:pb-3">
           <div className="min-w-0">
-            <h2 className="text-base sm:text-lg font-semibold text-white truncate">Auto Percentage Ranges</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-white truncate max-lg:text-[18px] max-lg:font-extrabold max-lg:tracking-tight max-lg:text-[#0F172A]">Auto Percentage Ranges</h2>
             <p className="hidden sm:block text-xs text-blue-100 mt-0.5"></p>
           </div>
           <button
             onClick={onClose}
             disabled={saving}
-            className="text-white/80 hover:text-white transition-colors disabled:opacity-50"
+            className="text-white/80 hover:text-white transition-colors disabled:opacity-50 max-lg:w-10 max-lg:h-10 max-lg:p-0 max-lg:flex max-lg:items-center max-lg:justify-center max-lg:rounded-xl max-lg:border max-lg:border-[#D5DEEA] max-lg:text-[#0F172A] max-lg:hover:bg-white/60"
             aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -134,9 +134,9 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
           </button>
         </div>
 
-        <div className="px-3 sm:px-6 py-3 sm:py-5 space-y-4 sm:space-y-5 overflow-y-auto">
+        <div className="px-3 sm:px-6 py-3 sm:py-5 space-y-4 sm:space-y-5 overflow-y-auto max-lg:px-4 max-lg:pt-4 max-lg:pb-[calc(20px+env(safe-area-inset-bottom,0px))]">
           {/* Form */}
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 md:grid-cols-12 gap-2 sm:gap-3 p-3 sm:p-4 rounded-md border border-gray-200 bg-gray-50">
+          <form onSubmit={handleSubmit} className="grid grid-cols-2 md:grid-cols-12 gap-2 sm:gap-3 p-3 sm:p-4 rounded-md border border-gray-200 bg-gray-50 max-lg:bg-transparent max-lg:border-[#D5DEEA] max-lg:rounded-2xl max-lg:gap-3">
             <div className="col-span-1 md:col-span-3">
               <label className="block text-xs font-medium text-gray-700 mb-1">Login Start</label>
               <input
@@ -145,7 +145,7 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
                 onChange={(e) => setForm(f => ({ ...f, login_start: e.target.value }))}
                 placeholder="Login Start"
                 disabled={saving}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 max-lg:h-10 max-lg:bg-transparent max-lg:border-[#D5DEEA] max-lg:rounded-xl"
               />
             </div>
             <div className="col-span-1 md:col-span-3">
@@ -156,7 +156,7 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
                 onChange={(e) => setForm(f => ({ ...f, login_end: e.target.value }))}
                 placeholder="Login End"
                 disabled={saving}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 max-lg:h-10 max-lg:bg-transparent max-lg:border-[#D5DEEA] max-lg:rounded-xl"
               />
             </div>
             <div className="col-span-1 md:col-span-2">
@@ -170,7 +170,7 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
                 onChange={(e) => setForm(f => ({ ...f, percentage: e.target.value }))}
                 placeholder="Percentage (%)"
                 disabled={saving}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 max-lg:h-10 max-lg:bg-transparent max-lg:border-[#D5DEEA] max-lg:rounded-xl"
               />
             </div>
             <div className="col-span-1 md:col-span-4">
@@ -181,7 +181,7 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
                 onChange={(e) => setForm(f => ({ ...f, comment: e.target.value }))}
                 placeholder="Comment"
                 disabled={saving}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 max-lg:h-10 max-lg:bg-transparent max-lg:border-[#D5DEEA] max-lg:rounded-xl"
               />
             </div>
 
@@ -194,7 +194,7 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
                   type="button"
                   onClick={resetForm}
                   disabled={saving}
-                  className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 max-lg:h-10 max-lg:bg-transparent max-lg:border-[#D5DEEA] max-lg:rounded-xl"
                 >
                   Cancel Edit
                 </button>
@@ -202,7 +202,7 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2"
+                className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2 max-lg:h-10 max-lg:rounded-xl max-lg:bg-[#2563EB] max-lg:shadow-[0_4px_10px_rgba(37,99,235,0.3)]"
               >
                 {saving && (
                   <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -218,7 +218,7 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
           {/* Table */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-semibold text-gray-700">Existing Ranges {ranges.length > 0 && <span className="text-gray-500 font-normal">({ranges.length})</span>}</p>
+              <p className="text-sm font-semibold text-gray-700 max-lg:text-[15px] max-lg:font-extrabold max-lg:text-[#0F172A]">Existing Ranges {ranges.length > 0 && <span className="text-gray-500 font-normal">({ranges.length})</span>}</p>
               <button
                 onClick={fetchRanges}
                 disabled={loading}
@@ -232,9 +232,9 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
               <div className="mb-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</div>
             )}
 
-            <div className="border border-gray-200 rounded-md overflow-x-auto">
+            <div className="border border-gray-200 rounded-md overflow-x-auto max-lg:border-[#D5DEEA] max-lg:rounded-2xl">
               <table className="min-w-[720px] w-full text-sm">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 max-lg:bg-[#2563EB] max-lg:[&_th]:text-white">
                   <tr>
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide">ID</th>
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Login Start</th>
@@ -245,14 +245,14 @@ const AutoPercentageModal = ({ isOpen, onClose, onChanged }) => {
                     <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 max-lg:divide-[#D5DEEA]/60">
                   {loading && ranges.length === 0 ? (
                     <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-gray-500">Loading…</td></tr>
                   ) : ranges.length === 0 ? (
                     <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-gray-500">No auto-fill ranges yet. Add one above to get started.</td></tr>
                   ) : (
                     ranges.map(r => (
-                      <tr key={r.id} className={editingId === r.id ? 'bg-blue-50' : 'bg-white hover:bg-gray-50'}>
+                      <tr key={r.id} className={editingId === r.id ? 'bg-blue-50' : 'bg-white hover:bg-gray-50 max-lg:bg-transparent'}>
                         <td className="px-3 py-2 text-gray-700 tabular-nums">{r.id}</td>
                         <td className="px-3 py-2 text-gray-800 tabular-nums">{r.login_start}</td>
                         <td className="px-3 py-2 text-gray-800 tabular-nums">{r.login_end}</td>

@@ -2523,7 +2523,8 @@ const ClientsPage = () => {
                     </div>
                     <div className="px-3 py-2 border-b border-pink-200">
                       <input
-                        type="text"
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')}
+                       
                         placeholder="Search cards..."
                         value={cardFilterSearchQuery}
                         onChange={(e) => setCardFilterSearchQuery(e.target.value)}
@@ -3655,7 +3656,8 @@ const ClientsPage = () => {
                                     <div className="p-2 border-b border-slate-200">
                                       <div className="relative">
                                         <input
-                                          type="text"
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')}
+                                         
                                           placeholder="Search values..."
                                           value={filterSearchQuery[col.baseKey] || ''}
                                           onChange={(e) => {

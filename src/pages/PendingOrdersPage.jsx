@@ -996,7 +996,8 @@ const PendingOrdersPage = () => {
                 <div className="p-2 border-b border-slate-200">
                   <div className="relative">
                     <input
-                      type="text"
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')}
+                     
                       placeholder="Search values..."
                       value={filterSearchQuery[columnKey] || ''}
                       onChange={(e) => {

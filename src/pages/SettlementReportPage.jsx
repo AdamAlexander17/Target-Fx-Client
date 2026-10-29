@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Sidebar from '../components/Sidebar'
+import MobileBottomNav from '../components/MobileBottomNav'
+import MobileSelect from '../components/MobileSelect'
 import BrokerCreditSummary from '../components/BrokerCreditSummary'
 import GroupSelector from '../components/GroupSelector'
 import GroupModal from '../components/GroupModal'
@@ -34,8 +36,8 @@ const Icon = ({ d, className = 'h-4 w-4', strokeWidth = 1.8 }) => (
 const readColumnPrefs = () => {
   try {
     const stored = JSON.parse(localStorage.getItem(COLUMN_PREFS_KEY))
-    return { hidden: Array.isArray(stored?.hidden) ? stored.hidden : [], order: Array.isArray(stored?.order) ? stored.order : [] }
-  } catch { return { hidden: [], order: [] } }
+    return { hidden: Array.isArray(stored?.hidden) ? stored.hidden : [], order: Array.isArray(stored?.order) ? stored.order : [], pinned: Array.isArray(stored?.pinned) ? stored.pinned : [] }
+  } catch { return { hidden: [], order: [], pinned: [] } }
 }
 
 export default function SettlementReportPage() {
@@ -182,7 +184,31 @@ export default function SettlementReportPage() {
     else if (columns.filter(column => !hidden.has(column.key)).length > 1) hidden.add(key) // never hide the last column
     return { ...prefs, hidden: [...hidden] }
   })
-  const resetColumns = () => setColumnPrefs({ hidden: [], order: [] })
+  const resetColumns = () => setColumnPrefs({ hidden: [], order: [], pinned: [] })
+  const pinnedKeys = columnPrefs.pinned || []
+  const togglePinColumn = key => setColumnPrefs(prefs => {
+    const pinned = prefs.pinned || []
+    return { ...prefs, pinned: pinned.includes(key) ? pinned.filter(value => value !== key) : [...pinned, key] }
+  })
+  // Phone: pinned columns (Login always) render first and stay frozen while sliding sideways.
+  // Pinned cells get a fixed width so the sticky left offsets line up.
+  const isPhonePinned = column => column.kind === 'login' || pinnedKeys.includes(column.key)
+  const phoneColumns = [
+    ...shownColumns.filter(column => column.kind === 'login'),
+    ...shownColumns.filter(column => column.kind !== 'login' && isPhonePinned(column)),
+    ...shownColumns.filter(column => !isPhonePinned(column))
+  ]
+  const phonePinLeft = {}
+  phoneColumns.reduce((offset, column) => {
+    if (!isPhonePinned(column)) return offset
+    phonePinLeft[column.key] = offset
+    return offset + (column.kind === 'login' ? 80 : 110)
+  }, 0)
+  const phonePinStyle = (column, header = false) => {
+    if (!isPhonePinned(column)) return undefined
+    const width = column.kind === 'login' ? 80 : 110
+    return { position: 'sticky', left: phonePinLeft[column.key], width, minWidth: width, maxWidth: width, zIndex: header ? 30 : 1, boxShadow: '2px 0 4px rgba(0,0,0,0.05)' }
+  }
 
   const [columnPickerOpen, setColumnPickerOpen] = useState(false)
   const columnPickerRef = useRef(null)
@@ -297,15 +323,15 @@ export default function SettlementReportPage() {
   const phoneRows = loading || weeksLoading
     ? Array.from({ length: 12 }, (_, row) => (
       <tr key={`sk-${row}`}>
-        {Array.from({ length: Math.max(shownColumns.length, 5) }, (_, col) => (
-          <td key={col} className="h-[38px] border-b border-[#E1E1E1] bg-white px-1"><div className="h-3 w-full max-w-[80%] animate-pulse rounded bg-gray-200" /></td>
+        {Array.from({ length: Math.max(phoneColumns.length, 5) }, (_, col) => (
+          <td key={col} className="h-[38px] border-b border-[#E1E1E1] bg-transparent px-1"><div className="h-3 w-full max-w-[80%] animate-pulse rounded bg-gray-200" /></td>
         ))}
       </tr>
     ))
     : empty ? null : rows.map((row, index) => (
-      <tr key={index} className="bg-white hover:bg-[#F8FAFC]">
-        {shownColumns.map(column => (
-          <td key={column.key} className={`h-[38px] whitespace-nowrap border-b border-[#E1E1E1] px-1 text-[10px] text-[#4B4B4B] ${column.kind === 'login' ? 'sticky left-0 z-[1] bg-white px-2 font-semibold text-[#1A63BC]' : ''}`} style={column.kind === 'login' ? { boxShadow: '2px 0 4px rgba(0,0,0,0.05)' } : undefined}>
+      <tr key={index} className="bg-transparent">
+        {phoneColumns.map(column => (
+          <td key={column.key} className={`h-[38px] whitespace-nowrap border-b border-[#E1E1E1] px-1 text-[10px] text-[#4B4B4B] ${isPhonePinned(column) ? 'truncate bg-white px-2' : ''} ${column.kind === 'login' ? 'font-semibold text-[#1A63BC]' : ''}`} style={phonePinStyle(column)}>
             <Cell column={column} value={row?.[column.key]} onOpen={column.kind === 'login' ? () => setSelectedRow(row) : undefined} />
           </td>
         ))}
@@ -328,8 +354,12 @@ export default function SettlementReportPage() {
           onToggle={toggleColumn}
           columnOrder={orderedColumns.map(column => column.key)}
           onReorder={order => setColumnPrefs(prefs => ({ ...prefs, order }))}
+          onResetOrder={resetColumns}
           accent="blue"
           title={null}
+          pinnedColumns={pinnedKeys}
+          onPinToggle={togglePinColumn}
+          reorderMode={isPhone ? 'touch' : undefined}
         />
       </div>
     </>
@@ -340,29 +370,36 @@ export default function SettlementReportPage() {
   const phonePagerButton = disabled => `flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#E5E7EB] bg-white shadow-sm ${disabled ? 'cursor-not-allowed opacity-40' : 'hover:bg-gray-50'}`
   const phoneLayout = (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="relative flex flex-wrap items-center border-b border-[#ECECEC] bg-white px-4 py-4">
-        <button type="button" onClick={() => setMobileNavOpen(true)} className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F8F8F8]" aria-label="Open menu">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round" /></svg>
+      <div className="relative flex flex-wrap items-center gap-3 bg-transparent px-4 pt-4 pb-2">
+        <button type="button" onClick={() => setMobileNavOpen(true)} className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-[#D5DEEA] bg-transparent" aria-label="Open menu">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round" /></svg>
         </button>
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="min-w-0 text-lg font-semibold text-[#000000] max-sm:text-sm">Settlement Report</h1><BrokerCreditSummary variant="header" /></div>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="truncate text-[#0F172A]">Settlement Report</h1>
+            <p className="truncate text-[12px] text-[#64748B]">Week-wise settlement across all accounts</p>
+          </div>
+          <BrokerCreditSummary variant="header" />
+        </div>
         <BrokerCreditSummary variant="desktop-header" />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {/* Toolbar */}
-        <div className="px-2 pb-2 pt-3">
-          <div className="flex w-full flex-nowrap items-center justify-between gap-1 overflow-x-auto py-1">
+        <div className="px-4 pb-2 pt-1">
+          <div className="flex w-full flex-nowrap items-center gap-1.5 py-1">
             <div className="shrink-0">
-              <button type="button" onClick={openMobileFilters} aria-haspopup="dialog" aria-expanded={mobileFilterView !== null} title={activeGroupName ? `Group filter: ${activeGroupName}` : 'Customize view'} className={`flex h-7 items-center gap-1 rounded-md border px-2 text-[10px] font-medium shadow-sm ${activeGroupName ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-[#E5E7EB] bg-white text-[#374151]'}`}>
+              <button type="button" onClick={openMobileFilters} aria-haspopup="dialog" aria-expanded={mobileFilterView !== null} title={activeGroupName ? `Group filter: ${activeGroupName}` : 'Customize view'} className={`relative flex h-9 items-center gap-1 rounded-xl border px-2.5 text-[11px] font-semibold ${activeGroupName ? 'border-blue-200 bg-blue-50 text-[#2563EB]' : 'border-[#D5DEEA] bg-transparent text-[#1F2937]'}`}>
                 <svg className="h-3 w-3" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 3h14M4 6h10M6 9h6" /></svg>
                 Filter
-                {activeGroupName && <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />}
+                {activeGroupName && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[#2563EB] ring-2 ring-white" />}
               </button>
             </div>
-            <select value={weekId ?? ''} onChange={event => changeWeek(event.target.value)} disabled={!weeks.length} aria-label="Settlement week" className="h-7 min-w-0 max-w-[170px] flex-1 rounded-md border border-[#E5E7EB] bg-white px-1 text-[10px] font-medium text-[#374151] shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
-              {!weeks.length && <option value="">{weeksLoading ? 'Loading…' : 'No weeks'}</option>}
-              {weeks.map(week => <option key={week.id} value={week.id}>{week.name || week.label || `Week ${week.id}`}</option>)}
-            </select>
+            <MobileSelect ariaLabel="Settlement week" title="Settlement week" className="min-w-0 flex-1 !h-9 !px-3 !text-[12px] !font-semibold" value={weekId ?? ''}
+              disabled={!weeks.length}
+              placeholder={weeksLoading ? 'Loading…' : 'No weeks'}
+              onChange={changeWeek}
+              options={weeks.map(week => ({ value: week.id, label: week.name || week.label || `Week ${week.id}` }))} />
             <button type="button" onClick={doExport} disabled={exporting || loading || weekId === null || groupEmpty} className={phoneIconButton} aria-label="Export settlement report" title={exporting ? 'Exporting…' : 'Export this week as XLSX'}>
               <Icon d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" strokeWidth={2} className={`h-4 w-4 ${exporting ? 'animate-pulse text-blue-600' : ''}`} />
             </button>
@@ -385,20 +422,21 @@ export default function SettlementReportPage() {
         )}
 
         {/* Search + pagination */}
-        <div className="mx-1 mb-1 px-3 py-3">
-          <div className="flex items-center gap-1">
-            <div className="flex h-7 w-[45%] min-w-0 max-w-[180px] items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-[#F9FAFB] px-2">
-              <svg width="12" height="12" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" /><path d="M13 13L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-              <input placeholder="Search" value={searchInput} onChange={event => setSearchInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { setSearch(searchInput.trim()); setPage(1) } }} className="min-w-0 flex-1 bg-transparent text-[11px] text-[#1F2937] outline-none placeholder-[#9CA3AF]" aria-label="Search settlement report" />
+        <div className="mx-4 mb-3">
+          <div className="flex items-center gap-1.5">
+            <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#D5DEEA] bg-transparent px-3">
+              <svg width="15" height="15" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" /><path d="M13 13L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              <input
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')} placeholder="Search by login, name..." value={searchInput} onChange={event => setSearchInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { setSearch(searchInput.trim()); setPage(1) } }} className="report-plain-input min-w-0 flex-1 bg-transparent text-[13px] text-[#1F2937] outline-none placeholder-[#9CA3AF]" aria-label="Search settlement report" />
             </div>
-            <button type="button" onClick={() => setColumnPickerOpen(true)} disabled={!columns.length} className="mr-auto flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-[#E5E7EB] bg-white shadow-sm hover:bg-gray-50 disabled:opacity-50" title="Show/Hide Columns" aria-label="Show or hide columns">
+            <button type="button" onClick={() => setColumnPickerOpen(true)} disabled={!columns.length} className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#D5DEEA] bg-transparent disabled:opacity-50" title="Show/Hide Columns" aria-label="Show or hide columns">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="4" height="10" rx="1" stroke="#4B5563" strokeWidth="1.2" /><rect x="8" y="3" width="6" height="10" rx="1" stroke="#4B5563" strokeWidth="1.2" /></svg>
             </button>
             <button type="button" onClick={() => setPage(value => Math.max(1, value - 1))} disabled={prevDisabled} className={phonePagerButton(prevDisabled)} aria-label="Previous page">
               <svg width="12" height="12" viewBox="0 0 20 20" fill="none"><path d="M12 14L8 10L12 6" stroke="#4B5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
-            <div className="flex items-center gap-0.5 text-[11px] text-[#4B5563]">
-              <input type="number" min="1" max={totalPages} value={page} onChange={onPageInput} className="h-6 w-8 rounded-md border border-[#E5E7EB] text-center text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Current page" />
+            <div className="flex items-center gap-1 text-[13px] font-medium text-[#475569]">
+              <input type="number" min="1" max={totalPages} value={page} onChange={onPageInput} className="report-page-box h-10 w-10 rounded-xl text-center text-[13px] font-semibold focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" aria-label="Current page" />
               <span className="text-[#9CA3AF]">/</span>
               <span>{totalPages}</span>
             </div>
@@ -409,14 +447,14 @@ export default function SettlementReportPage() {
         </div>
 
         {/* Table */}
-        <div className="mx-1 overflow-hidden border border-blue-100 bg-white shadow-sm" style={{ marginBottom: 'calc(8px + var(--app-safe-bottom, 0px))' }}>
-          <div className="mobile-table-scroll w-full overflow-auto" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', maxHeight: 'max(152px, calc(var(--app-viewport-height, 100dvh) - 230px))' }}>
+        <div className="overflow-hidden border-y border-blue-100 max-md:border-b-0 bg-transparent" style={{ marginBottom: 'calc(8px + var(--app-safe-bottom, 0px))' }}>
+          <div className="mobile-table-scroll scrollbar-hide w-full overflow-auto" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', maxHeight: 'max(152px, calc(var(--app-viewport-height, 100dvh) - 230px))' }}>
             <table className="min-w-full border-separate border-spacing-0">
-              {shownColumns.length > 0 && (
+              {phoneColumns.length > 0 && (
                 <thead>
                   <tr>
-                    {shownColumns.map(column => (
-                      <th key={column.key} scope="col" className={`sticky top-0 h-[32px] whitespace-nowrap bg-blue-500 px-1 text-left text-[10px] font-semibold text-white ${column.kind === 'login' ? 'left-0 z-30 px-2' : 'z-20'}`}>{column.label}</th>
+                    {phoneColumns.map(column => (
+                      <th key={column.key} scope="col" className={`sticky -top-px h-[32px] whitespace-nowrap bg-blue-500 px-1 text-left text-[10px] font-semibold text-white ${isPhonePinned(column) ? 'z-30 truncate px-2' : 'z-20'}`} style={{ ...phonePinStyle(column, true), top: -1 }}>{column.label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -429,20 +467,32 @@ export default function SettlementReportPage() {
       </div>
 
       {columnPickerOpen && (
-        <div className="fixed inset-0 z-[90] flex items-end bg-black/30">
-          <div ref={columnPickerRef} className="flex max-h-[70vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl" style={{ paddingBottom: 'var(--app-safe-bottom, 0px)' }}>{columnPickerPanel}</div>
+        <div className="fixed inset-0 z-[90] flex items-end bg-black/40">
+          {/* Scoped restyle of the shared ColumnChooserList to match the mobile theme */}
+          <style>{`
+            .c2-col-chooser > div > div { border-color: #D5DEEA !important; }
+            .c2-col-chooser input[type="text"] { background: transparent !important; border-color: #D5DEEA !important; border-radius: 12px !important; height: 40px; font-size: 13px !important; }
+            .c2-col-chooser input[type="checkbox"] { width: 16px !important; height: 16px !important; accent-color: #2563EB; border-radius: 4px; }
+            .c2-col-chooser .overscroll-contain > [data-col-key] { padding-top: 10px; padding-bottom: 10px; margin-left: 12px; margin-right: 12px; border-radius: 0; border-bottom: 1px solid rgba(213, 222, 234, 0.6); }
+            .c2-col-chooser .overscroll-contain > [data-col-key] label span { font-size: 13px !important; color: #1F2937 !important; }
+            .c2-col-chooser > .border-b { border-color: #D5DEEA !important; }
+          `}</style>
+          <div ref={columnPickerRef} className="c2-col-chooser flex max-h-[85dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-[0_-8px_30px_rgba(15,23,42,0.12)]" style={{ paddingBottom: 'var(--app-safe-bottom, 0px)' }}>
+            <div className="flex shrink-0 justify-center pt-2.5"><span className="h-1 w-10 rounded-full bg-[#CBD5E1]" /></div>
+            {columnPickerPanel}
+          </div>
         </div>
       )}
     </div>
   )
 
   return (
-    <div className={`flex h-screen overflow-hidden ${isPhone ? 'bg-[#F8F8F8]' : 'bg-[#F8FAFC]'}`}>
+    <div className={`flex h-[100dvh] overflow-hidden ${isPhone ? 'bg-[#F8F8F8]' : 'bg-[#F8FAFC]'}`}>
       {isMobile
         ? <Sidebar isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} onToggle={() => setMobileNavOpen(value => !value)} mobileOnly />
         : <Sidebar isOpen={sidebarOpen} onClose={() => setSidebar(false)} onToggle={() => setSidebar(!sidebarOpen)} />}
 
-      <main className={`flex min-w-0 flex-1 flex-col overflow-hidden ${isPhone ? '' : 'p-4 lg:p-6'} ${isMobile ? '' : `transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'}`}`}>
+      <main className={`report-mobile-theme report-white flex min-w-0 flex-1 flex-col overflow-hidden ${isPhone ? '' : 'p-4 lg:p-6'} ${isMobile ? '' : `transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'}`}`}>
         {isPhone ? phoneLayout : (<>
         {/* Header card — same layout as Deals: title on the left, controls on the right */}
         <div className="mb-4 shrink-0 rounded-2xl bg-white px-4 py-3 shadow-sm sm:px-6 lg:mb-6">
@@ -546,6 +596,10 @@ export default function SettlementReportPage() {
           </div>
         </div>
         </>)}
+        {/* Bottom Navigation (mobile only) */}
+        <div className="flex-shrink-0 md:hidden">
+          <MobileBottomNav onMore={() => setMobileNavOpen(true)} />
+        </div>
       </main>
 
       <GroupModal isOpen={showGroupModal} onClose={() => setShowGroupModal(false)} editGroup={editingGroup} />

@@ -7,6 +7,9 @@ import { brokerAPI } from '../services/api'
 import { useAuth } from '../contexts/authContextStore'
 import { useGroups } from '../contexts/groupContextStore'
 import Sidebar from '../components/Sidebar'
+import MobileBottomNav from '../components/MobileBottomNav'
+import MobileCalendar from '../components/MobileCalendar'
+import { formatIsoDate } from '../utils/isoDate'
 import GroupSelector from '../components/GroupSelector'
 import GroupModal from '../components/GroupModal'
 import CustomizeViewModal from '../components/CustomizeViewModal'
@@ -126,6 +129,8 @@ const ReportsExchangePage = () => {
   const [weeks, setWeeks] = useState([])
   const [weeksLoading, setWeeksLoading] = useState(false)
   const [selectedWeekId, setSelectedWeekId] = useState('')
+  const [isWeekMenuOpen, setIsWeekMenuOpen] = useState(false)
+  const [activeDateField, setActiveDateField] = useState(null) // 'from' | 'to' | null — mobile date panel
 
   const [data, setData] = useState(null) // full response.data
   const [loading, setLoading] = useState(false)
@@ -598,22 +603,28 @@ const ReportsExchangePage = () => {
         />
       </div>
 
-      <main className={`min-w-0 min-h-0 flex-1 px-0 pt-0 pb-3 sm:p-4 lg:p-6 transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'} flex flex-col overflow-hidden`}>
+      <main className={`report-mobile-theme report-white min-w-0 min-h-0 flex-1 px-0 pt-0 pb-3 sm:p-4 lg:p-6 transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'} flex flex-col overflow-hidden`}>
         <div className="max-w-full min-w-0 min-h-0 mx-auto w-full flex flex-col flex-1 overflow-hidden">
           {/* Header Card */}
           <div className="bg-white rounded-none sm:rounded-2xl shadow-sm px-0 sm:px-6 py-0 sm:py-3 mb-0 sm:mb-2">
-            <div className="flex-wrap sm:hidden flex items-center px-4 py-4 bg-white border-b border-[#ECECEC] relative">
+            <div className="flex-wrap sm:hidden flex items-center gap-3 px-4 pt-4 pb-2 bg-transparent relative">
               <button
                 type="button"
                 onClick={() => setSidebarOpen(v => { const n = !v; try { localStorage.setItem('sidebarOpen', JSON.stringify(n)) } catch { /* Retain the fallback when this operation is unavailable. */ } ; return n })}
-                className="w-12 h-12 rounded-2xl bg-[#F8F8F8] flex items-center justify-center"
+                className="w-12 h-12 flex-shrink-0 rounded-2xl bg-transparent border border-[#D5DEEA] flex items-center justify-center"
                 aria-label="Open menu"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
                   <path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
-              <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="text-xl font-semibold text-black transform min-w-0 max-sm:text-sm">Brokerage Data</h1><BrokerCreditSummary variant="header" /></div>
+              <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="text-[22px] leading-7 font-extrabold tracking-tight text-[#0F172A] truncate">Brokerage Data</h1>
+                  <p className="text-[12px] text-[#64748B] truncate">Weekly brokerage by exchange</p>
+                </div>
+                <BrokerCreditSummary variant="header" />
+              </div>
             
 
 
@@ -736,24 +747,51 @@ const ReportsExchangePage = () => {
               </div>
             </div>
 
-            <div className="sm:hidden relative flex flex-nowrap items-center justify-between gap-1.5 px-3 py-2 overflow-visible">
-              <button type="button" onClick={openMobileFilters} aria-haspopup="dialog" aria-expanded={mobileFilterView !== null} title={activeGroupName ? `Group filter: ${activeGroupName}` : 'Customize view'} className={`flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 text-[11px] font-medium shadow-sm ${activeGroupName ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-[#E5E7EB] bg-white text-gray-700'}`}>
+            <div className="sm:hidden relative flex flex-nowrap items-center justify-between gap-1.5 px-4 pt-1 pb-2 overflow-visible">
+              <button type="button" onClick={openMobileFilters} aria-haspopup="dialog" aria-expanded={mobileFilterView !== null} title={activeGroupName ? `Group filter: ${activeGroupName}` : 'Customize view'} className={`flex h-9 shrink-0 items-center gap-1 rounded-xl border px-2.5 text-[11px] font-medium ${activeGroupName ? 'border-blue-200 bg-blue-50 text-[#2563EB]' : 'border-[#D5DEEA] bg-transparent text-[#1F2937]'}`}>
                 <svg className="h-3 w-3" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 3h14M4 6h10M6 9h6" /></svg>
                 Filter
                 {activeGroupName && <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />}
               </button>
               {weeksLoading ? (
-                <div className="h-8 rounded-md bg-gray-200 animate-pulse flex-1 min-w-0" aria-label="Loading weeks" />
+                <div className="h-9 rounded-xl bg-gray-200 animate-pulse flex-1 min-w-0" aria-label="Loading weeks" />
               ) : (
-                <select
-                  value={selectedWeekId}
-                  onChange={(e) => setSelectedWeekId(e.target.value)}
-                  disabled={!weeks.length}
-                  className="h-8 flex-1 min-w-0 px-2 rounded-md border border-[#E5E7EB] bg-white text-[11px] text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 truncate"
-                >
-                  {!weeks.length && <option>No weeks</option>}
-                  {weeks.map(w => <option key={w.id} value={String(w.id)}>{w.name}</option>)}
-                </select>
+                <div className="relative flex-1 min-w-0">
+                  {/* Week picker: styled dropdown (native select lists can't be themed), same as Bills */}
+                  <button
+                    type="button"
+                    aria-label="Select week"
+                    aria-expanded={isWeekMenuOpen}
+                    disabled={!weeks.length}
+                    onClick={() => setIsWeekMenuOpen(v => !v)}
+                    className="h-9 w-full px-2.5 rounded-xl border border-[#D5DEEA] bg-transparent flex items-center gap-1.5 text-left disabled:opacity-60"
+                  >
+                    <span className="flex-1 min-w-0 truncate text-[12px] font-semibold text-[#0F172A]">{weeks.find(w => String(w.id) === String(selectedWeekId))?.name || (weeks.length ? 'Select week' : 'No weeks')}</span>
+                    <svg className={`w-3 h-3 flex-shrink-0 transition-transform ${isWeekMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                  {isWeekMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsWeekMenuOpen(false)} />
+                      <div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[50vh] overflow-y-auto rounded-2xl border border-[#D5DEEA] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.14)] p-1.5">
+                        <p className="px-2.5 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">Settlement Week</p>
+                        {weeks.map(w => {
+                          const active = String(w.id) === String(selectedWeekId)
+                          return (
+                            <button
+                              key={w.id}
+                              type="button"
+                              onClick={() => { setSelectedWeekId(String(w.id)); setIsWeekMenuOpen(false) }}
+                              className={`w-full h-10 px-3 rounded-xl flex items-center justify-between text-left text-[13px] ${active ? 'bg-[#2563EB] text-white font-semibold' : 'text-[#1F2937] active:bg-white/70'}`}
+                            >
+                              <span className="truncate">{w.name}</span>
+                              {active && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
 
               <div className="flex-shrink-0" ref={mobileDatePickerRef}>
@@ -763,43 +801,57 @@ const ReportsExchangePage = () => {
                     setCustomFromDate(appliedFromDate)
                     setCustomToDate(appliedToDate)
                     setDateError('')
+                    setActiveDateField(null)
                     setShowDatePicker(value => !value)
                   }}
-                  className={`h-8 w-8 rounded-md border shadow-sm flex items-center justify-center ${appliedFromDate && appliedToDate ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-[#E5E7EB] bg-white text-gray-700'}`}
+                  className={`h-9 w-9 rounded-xl border flex items-center justify-center ${appliedFromDate && appliedToDate ? 'border-blue-200 bg-blue-50 text-[#2563EB]' : 'border-[#D5DEEA] bg-transparent text-[#1F2937]'}`}
                   aria-label="Choose custom date range"
                   title="Choose custom date range"
                 >
                   <CalendarIcon />
                 </button>
                 {showDatePicker && (
-                  <div className="absolute left-1/2 top-full z-50 mt-2 w-[calc(100vw-1rem)] max-w-72 -translate-x-1/2 rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-xl">
-                    <p className="text-sm font-semibold text-[#1F2937]">Custom date range</p>
-                    <p className="mt-0.5 text-[11px] text-[#6B7280]">Filter brokerage data for the selected period.</p>
-                    <div className="mt-3 space-y-3">
-                      <label className="block text-xs font-medium text-[#374151]">
-                        From
-                        <input
-                          type="date"
-                          value={customFromDate}
-                          onChange={(event) => setCustomFromDate(event.target.value)}
-                          className="mt-1 h-9 w-full rounded-md border border-[#E5E7EB] px-2.5 text-sm text-[#1F2937] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                        />
-                      </label>
-                      <label className="block text-xs font-medium text-[#374151]">
-                        To
-                        <input
-                          type="date"
-                          value={customToDate}
-                          min={customFromDate || undefined}
-                          onChange={(event) => setCustomToDate(event.target.value)}
-                          className="mt-1 h-9 w-full rounded-md border border-[#E5E7EB] px-2.5 text-sm text-[#1F2937] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                        />
-                      </label>
+                  <div className="absolute left-1/2 top-full z-50 mt-2 w-[calc(100vw-2rem)] max-w-[300px] -translate-x-1/2 rounded-xl border border-[#D5DEEA] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.18)]">
+                    <p className="text-[14px] font-extrabold tracking-tight text-[#0F172A]">Custom date range</p>
+                    <p className="mt-0.5 text-[10.5px] leading-4 text-[#64748B]">Filter brokerage data for the selected period.</p>
+                    {/* From / To fields open the themed calendar inline (native date pickers can't be styled) */}
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {[['from', 'From', customFromDate], ['to', 'To', customToDate]].map(([key, label, date]) => (
+                        <button key={key} type="button" onClick={() => setActiveDateField(field => field === key ? null : key)}
+                          className={`rounded-lg border px-2.5 py-1.5 text-left ${activeDateField === key ? 'border-[#2563EB] bg-[#2563EB]/[0.06]' : 'border-[#D5DEEA] bg-white/60'}`}>
+                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">{label}</span>
+                          <span className="mt-0.5 flex items-center gap-1.5">
+                            <svg className={`h-3.5 w-3.5 shrink-0 ${activeDateField === key || date ? 'text-[#2563EB]' : 'text-[#94A3B8]'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></svg>
+                            <span className={`min-w-0 truncate text-[13px] font-semibold ${date ? 'text-[#0F172A]' : 'text-[#9CA3AF]'}`}>{date ? formatIsoDate(date) : 'Select date'}</span>
+                          </span>
+                        </button>
+                      ))}
                     </div>
+                    {activeDateField && (
+                      <div className="mt-2 rounded-lg border border-[#D5DEEA] bg-white/70 p-2">
+                        <MobileCalendar
+                          key={activeDateField}
+                          value={activeDateField === 'from' ? customFromDate : customToDate}
+                          min={activeDateField === 'to' ? customFromDate || undefined : undefined}
+                          rangeStart={customFromDate}
+                          rangeEnd={customToDate}
+                          onChange={iso => {
+                            if (activeDateField === 'from') {
+                              setCustomFromDate(iso)
+                              if (customToDate && customToDate < iso) setCustomToDate('')
+                              setActiveDateField('to')
+                            } else {
+                              setCustomToDate(iso)
+                              setActiveDateField(null)
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
                     {dateError && <p className="mt-2 text-xs text-red-600">{dateError}</p>}
-                    <div className="mt-4 flex items-center justify-between gap-2">
-                      <button type="button" onClick={clearDateFilter} disabled={!appliedFromDate && !appliedToDate} className="h-8 rounded-md px-2.5 text-xs font-medium text-[#6B7280] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">Clear</button>
-                      <button type="button" onClick={applyDateFilter} className="h-8 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700">Apply dates</button>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button type="button" onClick={clearDateFilter} disabled={!appliedFromDate && !appliedToDate} className="h-9 flex-1 rounded-lg border border-[#D5DEEA] bg-transparent text-[13px] font-semibold text-[#334155] disabled:cursor-not-allowed disabled:opacity-50">Clear</button>
+                      <button type="button" onClick={applyDateFilter} className="h-9 flex-1 rounded-lg bg-[#2563EB] text-[13px] font-semibold text-white shadow-[0_4px_10px_rgba(37,99,235,0.3)]">Apply dates</button>
                     </div>
                   </div>
                 )}
@@ -809,7 +861,7 @@ const ReportsExchangePage = () => {
                 type="button"
                 onClick={exportExcel}
                 disabled={!clients.length || exporting}
-                className="h-8 w-8 shrink-0 rounded-md border border-[#E5E7EB] bg-white text-gray-700 shadow-sm flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-9 w-9 shrink-0 rounded-xl border border-[#D5DEEA] bg-transparent text-[#1F2937] flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Export CSV"
                 title="Export CSV"
               >
@@ -825,10 +877,10 @@ const ReportsExchangePage = () => {
 </div>
 
           {selectedWeekId && (
-            <div className="flex items-center gap-2 px-3 py-4 sm:px-4 sm:py-5">
+            <div className="flex items-center gap-2 px-3 py-4 sm:px-4 sm:py-5 max-sm:gap-1.5 max-sm:px-4 max-sm:pt-1 max-sm:pb-3">
               <form onSubmit={submitSearch} className="min-w-0 flex-1 sm:max-w-md">
                 <div className="relative w-full">
-                  <svg className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF] sm:hidden" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <svg className="absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-[#9CA3AF] sm:hidden" viewBox="0 0 18 18" fill="none" aria-hidden="true">
                     <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
                     <path d="M13 13L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
@@ -843,9 +895,9 @@ const ReportsExchangePage = () => {
                           setCurrentPage(1)
                         }
                       }}
-                    placeholder="Search"
+                    placeholder="Search by login, name..."
                     aria-label="Search by Login or Name"
-                    className="h-8 w-full rounded-md border border-[#E5E7EB] bg-[#F9FAFB] pl-7 pr-12 text-[11px] text-[#1F2937] placeholder:text-[#9CA3AF] transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 sm:h-10 sm:pl-3 sm:pr-16 sm:text-sm"
+                    className="h-8 w-full rounded-md border border-[#E5E7EB] bg-[#F9FAFB] pl-7 pr-12 text-[11px] text-[#1F2937] placeholder:text-[#9CA3AF] transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 sm:h-10 sm:pl-3 sm:pr-16 sm:text-sm max-sm:h-10 max-sm:rounded-xl max-sm:pl-9 max-sm:pr-8 max-sm:text-[13px] max-sm:focus:ring-blue-200"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
                     {searchInput && (
@@ -865,7 +917,7 @@ const ReportsExchangePage = () => {
                       type="submit"
                       title="Search"
                       aria-label="Search"
-                      className="flex h-6 w-6 items-center justify-center rounded bg-blue-500 text-white transition-colors hover:bg-blue-600 sm:h-8 sm:w-8"
+                      className="flex h-6 w-6 items-center justify-center rounded bg-blue-500 text-white transition-colors hover:bg-blue-600 sm:h-8 sm:w-8 max-sm:hidden"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 18 18">
                         <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
@@ -875,21 +927,21 @@ const ReportsExchangePage = () => {
                   </div>
                 </div>
               </form>
-              <div className="ml-auto flex items-center gap-1 sm:gap-3">
+              <div className="ml-auto flex items-center gap-1 sm:gap-3 max-sm:gap-1.5">
                 <div className="hidden sm:block">
                   <PageSizeSelect value={pageSize} options={[50, 100, 200, 500]} onChange={handlePageSizeChange} />
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 max-sm:gap-1.5">
                   <button
                     type="button"
                     onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
                     disabled={currentPage <= 1}
-                    className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:h-8 sm:w-8"
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:h-8 sm:w-8 max-sm:h-10 max-sm:w-9 max-sm:rounded-xl max-sm:text-[#4B5563]"
                     aria-label="Previous page"
                   >
                     <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M12 14L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
-                  <div className="flex items-center gap-0.5 text-[11px] font-medium text-[#4B5563] sm:text-sm">
+                  <div className="flex items-center gap-0.5 text-[11px] font-medium text-[#4B5563] sm:text-sm max-sm:gap-1 max-sm:text-[13px] max-sm:text-[#475569]">
                     <input
                       type="number"
                       min={1}
@@ -899,7 +951,7 @@ const ReportsExchangePage = () => {
                         const page = Number(event.target.value)
                         if (Number.isInteger(page) && page >= 1 && page <= totalPages) setCurrentPage(page)
                       }}
-                      className="h-7 w-8 rounded-md border border-[#E5E7EB] text-center text-[11px] font-semibold text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-blue-500 sm:h-8 sm:w-10 sm:text-sm"
+                      className="h-7 w-8 rounded-md border border-[#E5E7EB] text-center text-[11px] font-semibold text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-blue-500 sm:h-8 sm:w-10 sm:text-sm report-page-box max-sm:h-10 max-sm:w-10 max-sm:text-[13px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       aria-label="Current page"
                     />
                     <span className="text-[#9CA3AF]">/</span>
@@ -909,7 +961,7 @@ const ReportsExchangePage = () => {
                     type="button"
                     onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
                     disabled={currentPage >= totalPages}
-                    className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:h-8 sm:w-8"
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:h-8 sm:w-8 max-sm:h-10 max-sm:w-9 max-sm:rounded-xl max-sm:text-[#4B5563]"
                     aria-label="Next page"
                   >
                     <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 6L12 10L8 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -1015,6 +1067,10 @@ const ReportsExchangePage = () => {
                   <div aria-hidden="true" className="mobile-table-end mobile-table-end-responsive" />
                 </div>
           </div>
+        </div>
+        {/* Bottom Navigation (mobile only) */}
+        <div className="flex-shrink-0 md:hidden">
+          <MobileBottomNav onMore={() => setSidebarOpen(true)} />
         </div>
       </main>
 

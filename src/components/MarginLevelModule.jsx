@@ -1,8 +1,8 @@
-import { drawerTapGuard } from '../utils/drawerTapGuard'
+import Sidebar from './Sidebar'
 import BrokerCreditSummary from './BrokerCreditSummary'
+import MobileBottomNav from './MobileBottomNav'
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { AskAiIcon, ReportsIcon, ReportSubIcon, TutorialIcon, BrokerageCalcIcon } from './ReportIcons'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/authContextStore'
 import { brokerAPI } from '../services/api'
 import CustomizeViewModal from './CustomizeViewModal'
@@ -40,8 +40,7 @@ const getMarginLevelPercent = (obj) => {
 }
 
 export default function MarginLevelModule() {
-  const navigate = useNavigate()
-  const { logout, isAuthenticated } = useAuth()
+  const { isAuthenticated } = useAuth()
   // Local state populated by polling /api/broker/clients/margin-call (replaces WebSocket-fed data)
   const [accounts, setAccounts] = useState([])
   const [marginCallLoaded, setMarginCallLoaded] = useState(false)
@@ -51,7 +50,6 @@ export default function MarginLevelModule() {
   const loading = { accounts: !marginCallLoaded, clients: !marginCallLoaded }
   const { filterByActiveGroup, activeGroupFilters, getActiveGroupFilter, setActiveGroupFilter } = useGroups()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [mobileReportsOpen, setMobileReportsOpen] = useState(false)
   const [numericMode, setNumericMode] = useState(() => { try { const s = localStorage.getItem('globalDisplayMode'); return s === 'full' ? 'full' : 'compact' } catch { return 'compact' } })
 
   const [searchInput, setSearchInput] = useState('')
@@ -429,19 +427,25 @@ const ml = getMarginLevelPercent(account)
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#F8F8F8] overflow-hidden" style={{ height: 'var(--app-viewport-height, 100dvh)' }}>
+    <div className="h-screen flex flex-col bg-white overflow-hidden" style={{ height: 'var(--app-viewport-height, 100dvh)' }}>
       {/* Header */}
-      <div className="flex-wrap flex items-center px-4 py-4 bg-white border-b border-[#ECECEC] relative">
+      <div className="flex-wrap flex items-center gap-3 px-4 pt-4 pb-2 bg-transparent relative">
         <button 
           onClick={() => setIsSidebarOpen(true)}
-          className="w-12 h-12 rounded-2xl bg-[#F8F8F8] flex items-center justify-center"
+          className="w-12 h-12 flex-shrink-0 rounded-2xl bg-transparent border border-[#D5DEEA] flex items-center justify-center"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         </button>
 
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="text-xl font-semibold text-black transform min-w-0 max-sm:text-sm">Margin Level</h1><BrokerCreditSummary variant="header" /></div>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[22px] leading-7 font-extrabold tracking-tight text-[#0F172A] truncate">Margin Level</h1>
+            <p className="text-[12px] text-[#64748B] truncate">Accounts below 50% margin level</p>
+          </div>
+          <BrokerCreditSummary variant="header" />
+        </div>
         {/* Hide profile avatar on mobile widths */}
         <div className="hidden md:flex w-12 h-12 rounded-full bg-blue-600 items-center justify-center ml-auto">
           <span className="text-white text-sm font-semibold">U</span>
@@ -453,142 +457,40 @@ const ml = getMarginLevelPercent(account)
 </div>
 
       {/* Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setIsSidebarOpen(false)}>
-          <div 
-            className="absolute left-0 top-0 bottom-0 w-[300px] bg-white flex flex-col shadow-xl rounded-r-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-4 border-b border-[#ECECEC]">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
-                  <span className="text-white text-sm font-semibold">BE</span>
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-[#000000]">Broker Eye</div>
-                  <div className="text-xs text-[#404040]">Financial Dashboard</div>
-                </div>
-              </div>
-              <button onClick={() => setIsSidebarOpen(false)}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="#404040" strokeWidth="2"/>
-                </svg>
-              </button>
-            </div>
-
-
-            <div className="flex-1 overflow-auto py-2" {...drawerTapGuard}>
-              {/* Compact / Full display mode toggle */}
-              <div className="px-3 pb-3 pt-1">
-                <p className="text-[9px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1.5 px-1">Display Mode</p>
-                <div className="flex items-center bg-[#F3F4F6] p-0.5 w-full rounded">
-                  <button type="button" onClick={() => { setNumericMode('compact'); try { localStorage.setItem('globalDisplayMode','compact') } catch { /* Retain the fallback when this operation is unavailable. */ } try { window.dispatchEvent(new CustomEvent('globalDisplayModeChanged',{detail:'compact'})) } catch { /* Retain the fallback when this operation is unavailable. */ } }} className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${numericMode==='compact'?'bg-[#3B5BDB] text-white shadow-sm':'text-[#374151] hover:bg-white/70'}`}>Compact</button>
-                  <button type="button" onClick={() => { setNumericMode('full'); try { localStorage.setItem('globalDisplayMode','full') } catch { /* Retain the fallback when this operation is unavailable. */ } try { window.dispatchEvent(new CustomEvent('globalDisplayModeChanged',{detail:'full'})) } catch { /* Retain the fallback when this operation is unavailable. */ } }} className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${numericMode==='full'?'bg-[#3B5BDB] text-white shadow-sm':'text-[#374151] hover:bg-white/70'}`}>Full</button>
-                </div>
-              </div>
-              <div className="border-t border-[#ECECEC] mb-2" />
-              <nav className="flex flex-col">
-                {[
-                  {label:'Clients', path:'/client2', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="3" stroke="#404040"/><circle cx="16" cy="8" r="3" stroke="#404040"/><path d="M3 20c0-3.5 3-6 7-6s7 2.5 7 6" stroke="#404040"/></svg>
-                  )},
-                  {label:'Positions', path:'/positions', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="3" rx="1" stroke="#404040"/><rect x="3" y="11" width="18" height="3" rx="1" stroke="#404040"/><rect x="3" y="16" width="18" height="3" rx="1" stroke="#404040"/></svg>
-                  )},
-                  {label:'Pending Orders', path:'/pending-orders', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#404040"/><circle cx="12" cy="12" r="2" fill="#404040"/></svg>
-                  )},
-                  {label:'Margin Level', path:'/margin-level', active:true, icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 18L10 12L14 16L20 8" stroke="#1A63BC" strokeWidth="2"/></svg>
-                  )},
-                  {label:'Live Dealing', path:'/live-dealing', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12a9 9 0 0 1 18 0" stroke="#404040"/><path d="M7 12a5 5 0 0 1 10 0" stroke="#404040"/></svg>
-                  )},
-                  {label:'Client Percentage', path:'/client-percentage', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6" stroke="#404040"/><circle cx="8" cy="8" r="2" stroke="#404040"/><circle cx="16" cy="16" r="2" stroke="#404040"/></svg>
-                  )},
-                  {label:'Bills', path:'/bills', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#404040"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#404040" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  )},
-                  {label:'Brokerage Calculator', path:'/brokerage-calculator'},
-                  {label:'Tutorials', path:'/tutorials', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="4.5" width="19" height="15" rx="3" stroke="#404040"/><path d="M10 9.2v5.6l5-2.8-5-2.8z" fill="#404040"/></svg>
-                  )},
-                ].map((item, idx) => (
-                  <button 
-                    key={idx} 
-                    onClick={() => {
-                      navigate(item.path)
-                      setIsSidebarOpen(false)
-                    }}
-                    className={`flex items-center gap-3 px-4 h-11 text-[13px] ${item.active ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                  >
-                    <span className="w-5 h-5 flex items-center justify-center">{item.path === "/tutorials" ? <TutorialIcon className="w-5 h-5 text-[#404040]" /> : item.path === "/brokerage-calculator" ? <BrokerageCalcIcon className="w-5 h-5 text-[#404040]" /> : <img src={`${import.meta.env.BASE_URL||'/'}sidebar-icons/${{'/dashboard':'Dashboard','/client2':'Clients','/positions':'Positions','/pending-orders':'Pending-Orders','/margin-level':'Margin-Level','/live-dealing':'Live-Dealing','/client-percentage':'Client-Percentage','/bills':'Bills','/tutorials':'Tutorials','/settings':'Settings'}[item.path]}.svg`} alt={item.label} style={{filter:'brightness(0)'}} className="w-5 h-5"/>}</span>
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-                <div>
-                  <button type="button" onClick={() => setMobileReportsOpen(value => !value)} className="flex items-center gap-3 px-4 h-11 w-full text-left text-[13px] text-[#404040]">
-                    <span className="w-5 h-5 flex items-center justify-center"><ReportsIcon className="w-5 h-5 text-black" /></span>
-                    <span className="flex-1">Reports</span>
-                    <svg className={`w-4 h-4 transition-transform ${mobileReportsOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  </button>
-                  {mobileReportsOpen && (
-                    <div className="flex flex-col pb-1">
-                      <button type="button" onClick={() => { navigate('/reports/exchange'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/exchange' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/exchange" />Brokerage Data</button>
-                      <button type="button" onClick={() => { navigate('/reports/historical-positions'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/historical-positions' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/historical-positions" />Historical Positions</button>
-                      <button type="button" onClick={() => { navigate('/reports/deals'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/deals' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/deals" />Deals</button>
-                      <button type="button" onClick={() => { navigate('/reports/summary'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/summary' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/summary" />Summary</button>
-                      <button type="button" onClick={() => { navigate('/reports/credit'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/credit' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/credit" />Credit Report</button>
-                      <button type="button" onClick={() => { navigate('/reports/agent-details'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/agent-details' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/agent-details" />Agent Details</button>
-                      <button type="button" onClick={() => { navigate('/reports/deposit-withdrawal'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/deposit-withdrawal' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' :  'text-[#404040]'}`}><ReportSubIcon path="/reports/deposit-withdrawal" />D/W Report</button>
-                      <button type="button" onClick={() => { navigate('/reports/settlement'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/settlement' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' :  'text-[#404040]'}`}><ReportSubIcon path="/reports/settlement" />Settlement Report</button>
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigate('/settings')
-                    setIsSidebarOpen(false)
-                  }}
-                  className={`flex items-center gap-3 px-4 h-11 text-[13px] ${location.pathname === '/settings' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                >
-                  <span className="w-5 h-5 flex items-center justify-center"><img src={`${import.meta.env.BASE_URL||'/'}sidebar-icons/Settings.svg`} alt="Settings" style={{filter:'brightness(0)'}} className="w-5 h-5"/></span>
-                  <span>Settings</span>
-                </button>
-              </nav>
-            </div>
-
-
-            <div className="p-4 mt-auto border-t border-[#ECECEC]">
-              <button onClick={logout} className="flex items-center gap-3 px-2 h-11 text-[13px] text-[#404040]">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M10 17l5-5-5-5" stroke="#404040" strokeWidth="2"/><path d="M4 12h11" stroke="#404040" strokeWidth="2"/></svg>
-                <span>Logout</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Shared mobile navigation drawer — one menu for every module (components/Sidebar.jsx) */}
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} onToggle={() => setIsSidebarOpen(value => !value)} mobileOnly />
 
 
       {/* Main Content */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {/* KPI cards */}
+        <div className="grid grid-cols-2 gap-[10px] px-4 pt-3 pb-3">
+          {cards.map((card, index) => <div key={card.label} className="min-w-0 h-[72px] rounded-[14px] bg-transparent border border-[#D5DEEA] p-2.5 flex flex-col justify-between">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-full bg-[#DBEAFE] text-[#2563EB]" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={index === 0 ? 'M5 20V10m7 10V4m7 16v-7M3 20h18' : 'M12 3a9 9 0 1 0 9 9M12 3v9h9'} /></svg>
+              </span>
+              <div className="truncate text-[11px] font-medium text-[#334155]">{card.label}</div>
+            </div>
+            <div className="truncate text-[14px] font-bold leading-[18px] text-[#0F172A]">{card.value}</div>
+          </div>)}
+        </div>
+
         {/* Action buttons row */}
-        <div className="pt-5 pb-4 px-4">
-          <div className="flex items-center gap-3">
+        <div className="pt-1 pb-3 px-4">
+          <div className="flex items-center gap-2">
             <button 
               onClick={() => setIsCustomizeOpen(true)} 
-              className={`h-8 px-3 rounded-[12px] border shadow-sm flex items-center justify-center gap-2 transition-all relative ${
+              className={`h-9 px-3 rounded-xl border flex items-center justify-center gap-1.5 transition-all relative ${
                 (filters.hasFloating || filters.hasCredit || filters.noDeposit || getActiveGroupFilter('marginlevel'))
                   ? 'bg-blue-50 border-blue-200' 
-                  : 'bg-white border-[#E5E7EB] hover:bg-gray-50'
+                  : 'bg-transparent border-[#D5DEEA] hover:bg-white/60'
               }`}
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M4.5 6.5H9.5M2.5 3.5H11.5M5.5 9.5H8.5" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              <span className="text-[#4B4B4B] text-[10px] font-medium font-outfit">Filter</span>
+              <span className="text-[#1F2937] text-[11px] font-medium font-outfit">Filter</span>
               {(() => {
                 const filterCount = [
                   filters.hasFloating,
@@ -606,7 +508,7 @@ const ml = getMarginLevelPercent(account)
             <button
               onClick={fetchMarginCallClients}
               disabled={loading.accounts}
-              className="w-8 h-8 rounded-lg border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-9 h-9 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-4 h-4" fill="none" stroke="#4B4B4B" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -616,35 +518,26 @@ const ml = getMarginLevelPercent(account)
         </div>
 
 
-        <div className="grid grid-cols-2 gap-2 px-4 pb-3">
-          {cards.map((card, index) => <div key={card.label} className="relative min-w-0 rounded-xl border border-slate-100 bg-white p-3 pr-9">
-            <span className="absolute right-2 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-blue-500" aria-hidden="true">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={index === 0 ? 'M5 20V10m7 10V4m7 16v-7M3 20h18' : 'M12 3a9 9 0 1 0 9 9M12 3v9h9'} /></svg>
-            </span>
-            <div className="text-[9px] font-medium text-slate-500">{card.label}</div>
-            <div className="mt-1 break-words text-sm font-semibold text-slate-900">{card.value}</div>
-          </div>)}
-        </div>
-
         {/* Navigation */}
-        <div className="flex flex-wrap items-center gap-1 px-4 pb-3">
+        <div className="flex items-center gap-1.5 px-4 pb-3">
           <div className="relative min-w-[100px] flex-1">
-            <svg className="pointer-events-none absolute left-2 top-2 text-slate-400" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg>
-            <input aria-label="Search margin level accounts" placeholder="Search" value={searchInput} onChange={event => { setSearchInput(event.target.value); setCurrentPage(1) }} className="h-7 w-full rounded-md border border-slate-200 bg-slate-50 pl-6 pr-6 text-[10px]" />
-            {searchInput && <button type="button" aria-label="Clear search" onClick={() => { setSearchInput(''); setCurrentPage(1) }} className="absolute right-1 top-1 p-1 text-gray-500"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>}
+            <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg>
+            <input
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')} aria-label="Search margin level accounts" placeholder="Search by login, name..." value={searchInput} onChange={event => { setSearchInput(event.target.value); setCurrentPage(1) }} className="h-10 w-full rounded-xl border border-[#D5DEEA] bg-transparent pl-9 pr-8 text-[13px] text-[#1F2937] placeholder-[#9CA3AF] outline-none" />
+            {searchInput && <button type="button" aria-label="Clear search" onClick={() => { setSearchInput(''); setCurrentPage(1) }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>}
           </div>
-          <button type="button" aria-label="Show or hide columns" onClick={() => setIsColumnSelectorOpen(true)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M10 4v16M15 4v16"/></svg></button>
-          <div className="flex shrink-0 items-center gap-1">
+          <button type="button" aria-label="Show or hide columns" onClick={() => setIsColumnSelectorOpen(true)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#D5DEEA] bg-transparent text-slate-500"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M10 4v16M15 4v16"/></svg></button>
+          <div className="flex shrink-0 items-center gap-1.5">
             <button 
               onClick={() => handlePageChange(currentPage - 1, totalPages)}
               disabled={currentPage === 1}
-              className="w-[28px] h-[28px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-9 h-10 bg-transparent border border-[#D5DEEA] rounded-xl flex items-center justify-center transition-colors flex-shrink-0 hover:bg-white/60 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
                 <path d="M12 14L8 10L12 6" stroke="#4B4B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-            <div className="px-2 text-[10px] font-medium text-[#4B4B4B] flex items-center gap-1">
+            <div className="text-[13px] font-medium text-[#475569] flex items-center gap-1">
               <input
                 type="number"
                 min={1}
@@ -657,7 +550,7 @@ const ml = getMarginLevelPercent(account)
                     handlePageChange(n, maxPage)
                   }
                 }}
-                className="w-10 h-6 border border-[#ECECEC] rounded-[8px] text-center text-[10px]"
+                className="w-10 h-10 bg-[#2563EB] text-white font-semibold border border-[#2563EB] rounded-xl text-center text-[13px] shadow-[0_4px_10px_rgba(37,99,235,0.3)] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 aria-label="Current page"
               />
               <span className="text-[#9CA3AF]">/</span>
@@ -666,7 +559,7 @@ const ml = getMarginLevelPercent(account)
             <button 
               onClick={() => handlePageChange(currentPage + 1, totalPages)}
               disabled={currentPage >= totalPages}
-              className="w-[28px] h-[28px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-9 h-10 bg-transparent border border-[#D5DEEA] rounded-xl flex items-center justify-center transition-colors flex-shrink-0 hover:bg-white/60 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
                 <path d="M8 6L12 10L8 14" stroke="#4B4B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -679,7 +572,7 @@ const ml = getMarginLevelPercent(account)
 
         {/* Table */}
         <div>
-          <div className="bg-white shadow-[0_0_12px_rgba(75,75,75,0.05)] border border-[#F2F2F7] overflow-hidden">
+          <div className="bg-transparent border border-blue-100 max-md:border-b-0 overflow-hidden">
             <div className="mobile-table-scroll w-full overflow-x-auto overflow-y-auto scrollbar-hide" style={{
               WebkitOverflowScrolling: 'touch',
               scrollbarWidth: 'none',
@@ -734,7 +627,7 @@ const ml = getMarginLevelPercent(account)
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                       <div data-mobile-data-row="body" 
                         key={`skeleton-row-${i}`}
-                        className="grid text-[10px] text-[#4B4B4B] font-outfit bg-white border-b border-[#E1E1E1]"
+                        className="grid text-[10px] text-[#4B4B4B] font-outfit bg-transparent border-b border-[#E1E1E1]"
                         style={{
                           gap: '0px', 
                           gridGap: '0px', 
@@ -764,7 +657,7 @@ const ml = getMarginLevelPercent(account)
                   sortedAccounts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((account, idx) => (
                   <div data-mobile-data-row="body" 
                     key={idx} 
-                    className="grid text-[10px] text-[#4B4B4B] font-outfit bg-white border-b border-[#E1E1E1] hover:bg-[#F8FAFC] transition-colors"
+                    className="grid text-[10px] text-[#4B4B4B] font-outfit bg-transparent border-b border-[#E1E1E1] hover:bg-white/50 transition-colors"
                     style={{
                       gap: '0px', 
                       gridGap: '0px', 
@@ -797,24 +690,39 @@ const ml = getMarginLevelPercent(account)
       </div>
 
 
+      {/* Bottom Navigation */}
+      <MobileBottomNav onMore={() => setIsSidebarOpen(true)} />
+
       {/* Column Selector Modal */}
       {isColumnSelectorOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setIsColumnSelectorOpen(false)}>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end" onClick={() => setIsColumnSelectorOpen(false)}>
+          {/* Scoped restyle of the shared ColumnChooserList to match the mobile theme */}
+          <style>{`
+            .c2-col-chooser > div > div { border-color: #D5DEEA !important; }
+            .c2-col-chooser input[type="text"] { background: transparent !important; border-color: #D5DEEA !important; border-radius: 12px !important; height: 40px; font-size: 13px !important; }
+            .c2-col-chooser input[type="checkbox"] { width: 16px !important; height: 16px !important; accent-color: #2563EB; border-radius: 4px; }
+            .c2-col-chooser .overscroll-contain > [data-col-key] { padding-top: 10px; padding-bottom: 10px; margin-left: 12px; margin-right: 12px; border-radius: 0; border-bottom: 1px solid rgba(213, 222, 234, 0.6); }
+            .c2-col-chooser .overscroll-contain > [data-col-key] label span { font-size: 13px !important; color: #1F2937 !important; }
+          `}</style>
           <div
-            className="bg-white w-full rounded-t-[24px] flex flex-col overflow-hidden"
+            className="bg-white w-full rounded-t-[28px] flex flex-col overflow-hidden shadow-[0_-8px_30px_rgba(15,23,42,0.12)]"
             style={{ maxHeight: '85dvh' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between flex-shrink-0">
-              <h3 className="text-base font-semibold text-[#000000]">Show/Hide & Reorder Columns</h3>
-              <button onClick={() => setIsColumnSelectorOpen(false)} aria-label="Close">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="#404040" strokeWidth="2"/>
+            <div className="pt-2.5 flex justify-center flex-shrink-0"><span className="w-10 h-1 rounded-full bg-[#CBD5E1]" /></div>
+            <div className="px-5 pt-3 pb-3 border-b border-[#D5DEEA] flex items-center justify-between gap-3 flex-shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-[18px] leading-6 font-extrabold tracking-tight text-[#0F172A] truncate">Columns</h3>
+                <p className="text-[12px] text-[#64748B] truncate">Show, hide, pin & reorder columns</p>
+              </div>
+              <button onClick={() => setIsColumnSelectorOpen(false)} aria-label="Close" className="w-10 h-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="#0F172A" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 flex flex-col">
+            <div className="c2-col-chooser flex-1 min-h-0 flex flex-col">
               <ColumnChooserList
                 columns={allColumns.map(({ key, label }) => ({ key, label }))}
                 visibleColumns={visibleColumns}

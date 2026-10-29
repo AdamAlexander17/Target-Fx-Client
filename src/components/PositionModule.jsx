@@ -1,11 +1,11 @@
-import { drawerTapGuard } from '../utils/drawerTapGuard'
+import Sidebar from './Sidebar'
 import BrokerCreditSummary from './BrokerCreditSummary'
+import MobileBottomNav from './MobileBottomNav'
+import ColumnChooserList from './ColumnChooserList'
 import { createLatestRequest } from '../utils/latestRequest'
 import React, { useState, useRef, useEffect, useMemo, useDeferredValue, startTransition } from 'react'
 import { AskAiIcon, ReportsIcon, ReportSubIcon, TutorialIcon, BrokerageCalcIcon } from './ReportIcons'
-import { useNavigate } from 'react-router-dom'
 import { useData } from '../contexts/dataContextStore'
-import { useAuth } from '../contexts/authContextStore'
 import CustomizeViewModal from './CustomizeViewModal'
 import FilterModal from './FilterModal'
 import DateFilterModal from './DateFilterModal'
@@ -30,12 +30,9 @@ const formatNum = (n) => {
 }
 
 export default function PositionModule() {
-  const navigate = useNavigate()
-  const { logout } = useAuth()
   const { positions, clients, loading, orders, rawClients } = useData()
   const { groups, deleteGroup, getActiveGroupFilter, setActiveGroupFilter, filterByActiveGroup, getGroupLogins, activeGroupFilters } = useGroups()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [mobileReportsOpen, setMobileReportsOpen] = useState(false)
   const [, setActiveCardIndex] = useState(0)
   const [searchInput, setSearchInput] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -84,7 +81,6 @@ export default function PositionModule() {
 
   const carouselRef = useRef(null)
   const [isColumnSelectorOpen, setIsColumnSelectorOpen] = useState(false)
-  const [columnSearch, setColumnSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [isPageChanging, setIsPageChanging] = useState(false)
   const pageChangeTimeoutRef = useRef(null)
@@ -125,6 +121,21 @@ export default function PositionModule() {
     totalCommission: false
   })
   const [clientNetShowColumnSelector, setClientNetShowColumnSelector] = useState(false)
+  // Saved column order for the mobile tables (drag to reorder in the column chooser)
+  const loadColumnOrder = (storageKey) => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || 'null')
+      return Array.isArray(saved) ? saved : null
+    } catch { return null }
+  }
+  const [positionsColumnOrder, setPositionsColumnOrder] = useState(() => loadColumnOrder('positionsMobileColumnOrder'))
+  const [clientNetColumnOrder, setClientNetColumnOrder] = useState(() => loadColumnOrder('positionsNetColumnOrder'))
+  useEffect(() => {
+    try { if (positionsColumnOrder) localStorage.setItem('positionsMobileColumnOrder', JSON.stringify(positionsColumnOrder)); else localStorage.removeItem('positionsMobileColumnOrder') } catch { /* Retain the fallback when this operation is unavailable. */ }
+  }, [positionsColumnOrder])
+  useEffect(() => {
+    try { if (clientNetColumnOrder) localStorage.setItem('positionsNetColumnOrder', JSON.stringify(clientNetColumnOrder)); else localStorage.removeItem('positionsNetColumnOrder') } catch { /* Retain the fallback when this operation is unavailable. */ }
+  }, [clientNetColumnOrder])
   const [clientNetSearchInput, setClientNetSearchInput] = useState('')
 
   // Server-side NET positions (fetched when NET Position tab is active)
@@ -636,12 +647,42 @@ export default function PositionModule() {
       { key: 'commission', label: 'Commission', width: '80px' },
     ]
     const filtered = columnDefs.filter(col => visibleColumns[col.key])
-    // Make first column sticky if it's not already login
-    if (filtered.length > 0 && filtered[0].key !== 'login') {
-      filtered[0].sticky = true
+    // Apply the saved drag-and-drop order; columns not in it keep their default position at the end
+    let ordered = filtered
+    if (Array.isArray(positionsColumnOrder) && positionsColumnOrder.length) {
+      const byKey = new Map(filtered.map(col => [col.key, col]))
+      ordered = []
+      positionsColumnOrder.forEach(key => { if (byKey.has(key)) { ordered.push(byKey.get(key)); byKey.delete(key) } })
+      byKey.forEach(col => ordered.push(col))
     }
-    return filtered
-  }, [visibleColumns, isMobileView])
+    // Only the first column is pinned (sticky) so it stays at the left edge when sliding
+    return ordered.map((col, index) => ({ ...col, sticky: index === 0 }))
+  }, [visibleColumns, isMobileView, positionsColumnOrder])
+
+  // NET table columns. Cells are written out per column in JSX, so reordering uses CSS grid `order`
+  // (each cell carries data-col) plus a matching width template; Symbol always stays first (pinned).
+  const CLIENT_NET_COLUMNS = [
+    { key: 'symbol', label: 'Symbol', width: 'minmax(140px, 2fr)' },
+    { key: 'netType', label: 'NET Type', width: 'minmax(60px, 1fr)' },
+    { key: 'netVolume', label: 'NET Volume', width: 'minmax(80px, 1fr)' },
+    { key: 'avgPrice', label: 'Avg Price', width: 'minmax(80px, 1fr)' },
+    { key: 'currentPrice', label: 'Current Price', width: 'minmax(90px, 1fr)' },
+    { key: 'totalProfit', label: 'Total Profit', width: 'minmax(90px, 1fr)' },
+    { key: 'totalStorage', label: 'Swap', width: 'minmax(80px, 1fr)' },
+    { key: 'totalCommission', label: 'Total Commission', width: 'minmax(80px, 1fr)' },
+    { key: 'loginCount', label: 'Logins', width: 'minmax(70px, 1fr)' },
+    { key: 'totalPositions', label: 'Positions', width: 'minmax(80px, 1fr)' }
+  ]
+  const clientNetOrderedColumns = useMemo(() => {
+    const byKey = new Map(CLIENT_NET_COLUMNS.map(col => [col.key, col]))
+    const ordered = []
+    ;(clientNetColumnOrder || []).forEach(key => { if (byKey.has(key)) { ordered.push(byKey.get(key)); byKey.delete(key) } })
+    byKey.forEach(col => ordered.push(col))
+    return [...ordered.filter(col => col.key === 'symbol'), ...ordered.filter(col => col.key !== 'symbol')]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientNetColumnOrder])
+  const clientNetGridTemplate = clientNetOrderedColumns.filter(col => clientNetVisibleColumns[col.key]).map(col => col.width).join(' ')
+  const clientNetOrderCss = clientNetOrderedColumns.map((col, index) => `[data-net-table] [data-col="${col.key}"]{order:${index}}`).join('')
 
   // Generate grid template columns for the table
   const gridTemplateColumns = useMemo(() => {
@@ -1033,19 +1074,25 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
   }, [])
 
   return (
-    <div className="h-screen flex flex-col bg-[#F8F8F8] overflow-hidden" style={{ height: 'var(--app-viewport-height, 100dvh)' }}>
+    <div className="h-screen flex flex-col bg-white overflow-hidden" style={{ height: 'var(--app-viewport-height, 100dvh)' }}>
       {/* Header */}
-      <div className="flex-wrap flex shrink-0 items-center justify-between px-4 py-4 bg-white border-b border-[#ECECEC]">
+      <div className="flex-wrap flex shrink-0 items-center justify-between gap-3 px-4 pt-4 pb-2 bg-transparent">
         <button 
           onClick={() => setIsSidebarOpen(true)}
-          className="w-12 h-12 rounded-2xl bg-[#F8F8F8] flex items-center justify-center"
+          className="w-12 h-12 flex-shrink-0 rounded-2xl bg-transparent border border-[#D5DEEA] flex items-center justify-center"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         </button>
 
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="text-xl font-semibold text-black min-w-0 max-sm:text-sm">Positions</h1><BrokerCreditSummary variant="header" /></div>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[22px] leading-7 font-extrabold tracking-tight text-[#0F172A] truncate">Positions</h1>
+            <p className="text-[12px] text-[#64748B] truncate">Track and monitor open positions</p>
+          </div>
+          <BrokerCreditSummary variant="header" />
+        </div>
 
         
       
@@ -1055,260 +1102,18 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
 </div>
 
       {/* Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setIsSidebarOpen(false)}>
-          <div 
-            className="absolute left-0 top-0 bottom-0 w-[300px] bg-white flex flex-col shadow-xl rounded-r-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-4 border-b border-[#ECECEC]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
-                  <span className="text-white text-sm font-semibold">BE</span>
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-[#000000]">Broker Eye</div>
-                  <div className="text-xs text-[#404040]">Financial Dashboard</div>
-                </div>
-              </div>
-              <button onClick={() => setIsSidebarOpen(false)}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="#404040" strokeWidth="2"/>
-                </svg>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-auto py-2" {...drawerTapGuard}>
-              {/* Compact / Full numeric display mode toggle — same as desktop sidebar */}
-              <div className="px-3 pb-3 pt-1">
-                <p className="text-[9px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1.5 px-1">Display Mode</p>
-                <div className="flex items-center bg-[#F3F4F6] p-0.5 w-full rounded">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNumericMode('compact')
-                      try { localStorage.setItem('globalDisplayMode', 'compact') } catch { /* Retain the fallback when this operation is unavailable. */ }
-                      try { window.dispatchEvent(new CustomEvent('globalDisplayModeChanged', { detail: 'compact' })) } catch { /* Retain the fallback when this operation is unavailable. */ }
-                    }}
-                    className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${numericMode === 'compact' ? 'bg-[#3B5BDB] text-white shadow-sm' : 'text-[#374151] hover:bg-white/70'}`}
-                  >
-                    Compact
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNumericMode('full')
-                      try { localStorage.setItem('globalDisplayMode', 'full') } catch { /* Retain the fallback when this operation is unavailable. */ }
-                      try { window.dispatchEvent(new CustomEvent('globalDisplayModeChanged', { detail: 'full' })) } catch { /* Retain the fallback when this operation is unavailable. */ }
-                    }}
-                    className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${numericMode === 'full' ? 'bg-[#3B5BDB] text-white shadow-sm' : 'text-[#374151] hover:bg-white/70'}`}
-                  >
-                    Full
-                  </button>
-                </div>
-              </div>
-              <div className="border-t border-[#ECECEC] mb-2" />
-              <nav className="flex flex-col">
-                {[
-                  {label:'Clients', path:'/client2', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="3" stroke="#404040"/><circle cx="16" cy="8" r="3" stroke="#404040"/><path d="M3 20c0-3.5 3-6 7-6s7 2.5 7 6" stroke="#404040"/></svg>
-                  )},
-                  {label:'Positions', path:'/positions', active:true, icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="3" rx="1" stroke="#1A63BC"/><rect x="3" y="11" width="18" height="3" rx="1" stroke="#1A63BC"/><rect x="3" y="16" width="18" height="3" rx="1" stroke="#1A63BC"/></svg>
-                  )},
-                  {label:'Pending Orders', path:'/pending-orders', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#404040"/><circle cx="12" cy="12" r="2" fill="#404040"/></svg>
-                  )},
-                  {label:'Margin Level', path:'/margin-level', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 18L10 12L14 16L20 8" stroke="#404040" strokeWidth="2"/></svg>
-                  )},
-                  {label:'Live Dealing', path:'/live-dealing', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12a9 9 0 0 1 18 0" stroke="#404040"/><path d="M7 12a5 5 0 0 1 10 0" stroke="#404040"/></svg>
-                  )},
-                  {label:'Client Percentage', path:'/client-percentage', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6" stroke="#404040"/><circle cx="8" cy="8" r="2" stroke="#404040"/><circle cx="16" cy="16" r="2" stroke="#404040"/></svg>
-                  )},
-                  {label:'Bills', path:'/bills', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#404040"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#404040" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  )},
-                  {label:'Brokerage Calculator', path:'/brokerage-calculator'},
-                  {label:'Tutorials', path:'/tutorials', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="4.5" width="19" height="15" rx="3" stroke="#404040"/><path d="M10 9.2v5.6l5-2.8-5-2.8z" fill="#404040"/></svg>
-                  )},
-                ].map((item, idx) => (
-                  <button 
-                    key={idx} 
-                    onClick={() => {
-                      navigate(item.path)
-                      setIsSidebarOpen(false)
-                    }}
-                    className={`flex items-center gap-3 px-4 h-11 text-[13px] ${item.active ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                  >
-                    <span className="w-5 h-5 flex items-center justify-center">{item.path === "/tutorials" ? <TutorialIcon className="w-5 h-5 text-[#404040]" /> : item.path === "/brokerage-calculator" ? <BrokerageCalcIcon className="w-5 h-5 text-[#404040]" /> : <img src={`${import.meta.env.BASE_URL||'/'}sidebar-icons/${{'/dashboard':'Dashboard','/client2':'Clients','/positions':'Positions','/pending-orders':'Pending-Orders','/margin-level':'Margin-Level','/live-dealing':'Live-Dealing','/client-percentage':'Client-Percentage','/bills':'Bills','/tutorials':'Tutorials','/settings':'Settings'}[item.path]}.svg`} alt={item.label} style={{filter:'brightness(0)'}} className="w-5 h-5"/>}</span>
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-                <div>
-                  <button type="button" onClick={() => setMobileReportsOpen(value => !value)} className="flex items-center gap-3 px-4 h-11 w-full text-left text-[13px] text-[#404040]">
-                    <span className="w-5 h-5 flex items-center justify-center"><ReportsIcon className="w-5 h-5 text-black" /></span>
-                    <span className="flex-1">Reports</span>
-                    <svg className={`w-4 h-4 transition-transform ${mobileReportsOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  </button>
-                  {mobileReportsOpen && (
-                    <div className="flex flex-col pb-1">
-                      <button type="button" onClick={() => { navigate('/reports/exchange'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/exchange' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/exchange" />Brokerage Data</button>
-                      <button type="button" onClick={() => { navigate('/reports/historical-positions'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/historical-positions' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/historical-positions" />Historical Positions</button>
-                      <button type="button" onClick={() => { navigate('/reports/deals'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/deals' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/deals" />Deals</button>
-                      <button type="button" onClick={() => { navigate('/reports/summary'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/summary' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/summary" />Summary</button>
-                      <button type="button" onClick={() => { navigate('/reports/credit'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/credit' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/credit" />Credit Report</button>
-                      <button type="button" onClick={() => { navigate('/reports/agent-details'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/agent-details' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/agent-details" />Agent Details</button>
-                      <button type="button" onClick={() => { navigate('/reports/deposit-withdrawal'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/deposit-withdrawal' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' :  'text-[#404040]'}`}><ReportSubIcon path="/reports/deposit-withdrawal" />D/W Report</button>
-                      <button type="button" onClick={() => { navigate('/reports/settlement'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/settlement' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' :  'text-[#404040]'}`}><ReportSubIcon path="/reports/settlement" />Settlement Report</button>
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigate('/settings')
-                    setIsSidebarOpen(false)
-                  }}
-                  className={`flex items-center gap-3 px-4 h-11 text-[13px] ${location.pathname === '/settings' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                >
-                  <span className="w-5 h-5 flex items-center justify-center"><img src={`${import.meta.env.BASE_URL||'/'}sidebar-icons/Settings.svg`} alt="Settings" style={{filter:'brightness(0)'}} className="w-5 h-5"/></span>
-                  <span>Settings</span>
-                </button>
-              </nav>
-            </div>
-
-            <div className="p-4 mt-auto border-t border-[#ECECEC]">
-              <button onClick={logout} className="flex items-center gap-3 px-2 h-11 text-[13px] text-[#404040]">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 18.25C11.8011 18.25 11.6103 18.329 11.4697 18.4697C11.329 18.6103 11.25 18.8011 11.25 19C11.25 19.1989 11.329 19.3897 11.4697 19.5303C11.6103 19.671 11.8011 19.75 12 19.75H18C18.4641 19.75 18.9092 19.5656 19.2374 19.2374C19.5656 18.9092 19.75 18.4641 19.75 18V6C19.75 5.53587 19.5656 5.09075 19.2374 4.76256C18.9092 4.43437 18.4641 4.25 18 4.25H12C11.8011 4.25 11.6103 4.32902 11.4697 4.46967C11.329 4.61032 11.25 4.80109 11.25 5C11.25 5.19891 11.329 5.38968 11.4697 5.53033C11.6103 5.67098 11.8011 5.75 12 5.75H18C18.0663 5.75 18.1299 5.77634 18.1768 5.82322C18.2237 5.87011 18.25 5.9337 18.25 6V18C18.25 18.0663 18.2237 18.1299 18.1768 18.1768C18.1299 18.2237 18.0663 18.25 18 18.25H12Z" fill="#FF5F57"/>
-                  <path fillRule="evenodd" clipRule="evenodd" d="M14.5029 14.365C15.1929 14.365 15.7529 13.805 15.7529 13.115V10.875C15.7529 10.185 15.1929 9.62498 14.5029 9.62498H9.8899L9.8699 9.40498L9.8159 8.84898C9.79681 8.65261 9.73064 8.46373 9.62301 8.29838C9.51538 8.13302 9.36946 7.99606 9.19763 7.8991C9.0258 7.80214 8.83312 7.74805 8.63593 7.74142C8.43874 7.73478 8.24286 7.77579 8.0649 7.86098C6.42969 8.64307 4.94977 9.71506 3.6969 11.025L3.5979 11.128C3.37433 11.3612 3.24951 11.6719 3.24951 11.995C3.24951 12.3181 3.37433 12.6287 3.5979 12.862L3.6979 12.965C4.95047 14.2748 6.43005 15.3468 8.0649 16.129C8.24286 16.2142 8.43874 16.2552 8.63593 16.2485C8.83312 16.2419 9.0258 16.1878 9.19763 16.0909C9.36946 15.9939 9.51538 15.8569 9.62301 15.6916C9.73064 15.5262 9.79681 15.3374 9.8159 15.141L9.8699 14.585L9.8899 14.365H14.5029ZM9.1949 12.865C9.00405 12.8651 8.82044 12.938 8.68147 13.0688C8.54249 13.1996 8.45861 13.3785 8.4469 13.569C8.42823 13.859 8.4049 14.1493 8.3769 14.44L8.3609 14.602C7.05583 13.9285 5.86846 13.0481 4.8449 11.995C5.86846 10.9418 7.05583 10.0614 8.3609 9.38798L8.3769 9.54998C8.4049 9.83998 8.42823 10.1303 8.4469 10.421C8.45861 10.6115 8.54249 10.7903 8.68147 10.9211C8.82044 11.0519 9.00405 11.1248 9.1949 11.125H14.2529V12.865H9.1949Z" fill="#FF5F57"/>
-                </svg>
-                <span>Logout</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Shared mobile navigation drawer — one menu for every module (components/Sidebar.jsx) */}
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} onToggle={() => setIsSidebarOpen(value => !value)} mobileOnly />
 
       {/* Main Content */}
       <div className="mobile-position-content flex-1 min-h-0 flex flex-col overflow-hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
-        {/* Action buttons row */}
-        <div className="pt-5 pb-4 px-4">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide py-1" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
-            <button 
-              onClick={() => setIsCustomizeOpen(true)}
-              className={`h-8 px-3 rounded-[12px] border shadow-sm flex items-center justify-center gap-2 transition-all relative flex-shrink-0 ${
-                (filters.hasFloating || filters.hasCredit || filters.noDeposit || getActiveGroupFilter('positions'))
-                  ? 'bg-blue-50 border-blue-200' 
-                  : 'bg-white border-[#E5E7EB] hover:bg-gray-50'
-              }`}
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M4.5 6H9.5M2.5 3.5H11.5M5.5 9.5H8.5" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              <span className="text-[#4B4B4B] text-[10px] font-medium font-outfit">Filter</span>
-              {(() => {
-                const filterCount = [
-                  filters.hasFloating,
-                  filters.hasCredit,
-                  filters.noDeposit,
-                  getActiveGroupFilter('positions')
-                ].filter(Boolean).length;
-                return filterCount > 0 ? (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                    {filterCount}
-                  </span>
-                ) : null;
-              })()}
-            </button>
-            <button 
-              onClick={() => {
-                startTransition(() => {
-                  setShowClientNet((v) => {
-                    const next = !v
-                    if (next) {
-                      setClientNetCurrentPage(1)
-                    }
-                    return next
-                  })
-                  if (!showClientNet) setShowExchangeView(false)
-                })
-              }}
-              style={{ minWidth: '110px', width: '110px', flexShrink: 0 }}
-              className={`h-8 rounded-[12px] ${showClientNet ? 'bg-blue-600 border-blue-600' : 'bg-white border-[#E5E7EB]'} border shadow-sm flex items-center justify-center gap-1.5 hover:opacity-90 transition-all`}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M7 10h10M10 14h7M13 18h4" stroke={showClientNet ? "#ffffff" : "#666666"} />
-              </svg>
-              <span className={`${showClientNet ? 'text-white' : 'text-[#666666]'} text-[10px] font-medium font-outfit`}>NET Position</span>
-            </button>
-            <button
-              onClick={() => {
-                startTransition(() => {
-                  const next = !showExchangeView
-                  setShowExchangeView(next)
-                  if (next) setShowClientNet(false)
-                })
-              }}
-              style={{ flexShrink: 0 }}
-              className={`h-8 px-3 rounded-[12px] ${showExchangeView ? 'bg-blue-600 border-blue-600' : 'bg-white border-[#E5E7EB]'} border shadow-sm flex items-center justify-center gap-1.5 hover:opacity-90 transition-all`}
-              title="Exchange-wise NET Position"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V10m4 11V10m6 11V10m4 11V10M12 3l9 5H3l9-5z" stroke={showExchangeView ? '#ffffff' : '#666666'} />
-              </svg>
-              <span className={`${showExchangeView ? 'text-white' : 'text-[#666666]'} text-[10px] font-medium font-outfit`}>Exchange</span>
-            </button>
-            {/* Percentage toggle icon button */}
-            <button
-              onClick={() => startTransition(() => setDisplayMode(m => m === 'percentage' ? 'value' : 'percentage'))}
-              title={displayMode === 'percentage' ? 'Switch to value view' : 'Switch to percentage view'}
-              className={`w-8 h-8 rounded-[12px] border shadow-sm flex items-center justify-center flex-shrink-0 transition-all ${
-                displayMode === 'percentage'
-                  ? 'bg-blue-600 border-blue-600'
-                  : 'bg-white border-[#E5E7EB] hover:bg-gray-50'
-              }`}
-            >
-              <span className={`text-[13px] font-bold leading-none ${displayMode === 'percentage' ? 'text-white' : 'text-[#4B4B4B]'}`}>%</span>
-            </button>
-
-            {/* Download button */}
-            <button
-              onClick={handleMobileExport}
-              disabled={isExporting}
-              title={isExporting ? 'Exporting...' : showClientNet ? 'Export NET positions to CSV' : 'Export positions to CSV'}
-              className="w-8 h-8 rounded-[12px] border border-[#E5E7EB] shadow-sm bg-white flex items-center justify-center hover:bg-gray-50 transition-all flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isExporting
-                ? <svg className="w-4 h-4 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-                : <svg className="w-4 h-4" fill="none" stroke="#4B4B4B" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-3-3m3 3l3-3M4 20h16"/></svg>
-              }
-            </button>
-
-            <button 
-              onClick={() => window.location.reload()}
-              disabled={loading.positions}
-              className="w-8 h-8 rounded-lg border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-all flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="#4B4B4B" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-
         {/* Face Cards Carousel - matching desktop: Total Positions, Floating Combined, Floating INR, Floating USD */}
         {isMobileView && !showClientNet && (() => {
           const cardStyle = {
-            boxSizing: 'border-box', minWidth: '125px', width: '125px', height: '60px',
-            background: '#FFFFFF', border: '1px solid #F2F2F7',
-            boxShadow: '0px 0px 12px rgba(75, 75, 75, 0.05)', borderRadius: '12px',
-            padding: '8px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+            boxSizing: 'border-box', minWidth: '132px', width: '132px', height: '72px',
+            background: 'transparent', border: '1px solid #D5DEEA',
+            boxShadow: 'none', borderRadius: '14px',
+            padding: '10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
             scrollSnapAlign: 'start', flexShrink: 0, flex: 'none',
             userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'pan-x'
           }
@@ -1349,19 +1154,19 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
             },
           ]
           return (
-            <div className="pb-2 pl-5">
-              <div className="flex gap-[8px] overflow-x-auto scrollbar-hide snap-x snap-mandatory pr-4">
+            <div className="pt-3 pb-1 pl-4">
+              <div className="flex gap-[10px] overflow-x-auto scrollbar-hide snap-x snap-mandatory pr-4 pb-2">
                 {mobileCards.map((card) => (
                   <div key={card.label} style={cardStyle}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', pointerEvents: 'none' }}>
-                      <span style={{ color: '#4B4B4B', fontSize: '9px', fontWeight: 600, lineHeight: '12px', paddingRight: '4px' }}>{card.label}</span>
-                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', pointerEvents: 'none' }}>
+                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: card.arrow ? (card.fullValue > 0 ? '#DCFCE7' : card.fullValue < 0 ? '#FEE2E2' : '#DBEAFE') : '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '5px' }}>
                         <img src={card.icon} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(0) saturate(100%) invert(27%) sepia(97%) saturate(1500%) hue-rotate(213deg) brightness(100%)' }} onError={(e) => { e.target.style.display = 'none' }} />
                       </div>
+                      <span style={{ color: '#334155', fontSize: '11px', fontWeight: 500, lineHeight: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.label}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minHeight: '16px', pointerEvents: 'none' }}>
                       {card.arrow && <span style={{ fontSize: '10px', color: card.color, lineHeight: 1, flexShrink: 0 }}>{card.arrow}</span>}
-                      <span title={numericMode === 'compact' ? fmtMoneyFull(card.fullValue) : undefined} style={{ fontSize: '13px', fontWeight: 700, lineHeight: '14px', letterSpacing: '-0.01em', color: card.color }}>{card.value}</span>
+                      <span title={numericMode === 'compact' ? fmtMoneyFull(card.fullValue) : undefined} style={{ fontSize: '14px', fontWeight: 700, lineHeight: '18px', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: card.color }}>{card.value}</span>
                     </div>
                   </div>
                 ))}
@@ -1370,25 +1175,132 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
           )
         })()}
 
+        {/* Action buttons row */}
+        <div className="pt-2 pb-3 px-3">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-1" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+            <button 
+              onClick={() => setIsCustomizeOpen(true)}
+              className={`h-9 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 transition-all relative flex-shrink-0 ${
+                (filters.hasFloating || filters.hasCredit || filters.noDeposit || getActiveGroupFilter('positions'))
+                  ? 'bg-blue-50 border-blue-200' 
+                  : 'bg-transparent border-[#D5DEEA] hover:bg-white/60'
+              }`}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M4.5 6H9.5M2.5 3.5H11.5M5.5 9.5H8.5" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <span className="text-[#1F2937] text-[11px] font-medium font-outfit">Filter</span>
+              {(() => {
+                const filterCount = [
+                  filters.hasFloating,
+                  filters.hasCredit,
+                  filters.noDeposit,
+                  getActiveGroupFilter('positions')
+                ].filter(Boolean).length;
+                return filterCount > 0 ? (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                    {filterCount}
+                  </span>
+                ) : null;
+              })()}
+            </button>
+            <button 
+              onClick={() => {
+                startTransition(() => {
+                  setShowClientNet((v) => {
+                    const next = !v
+                    if (next) {
+                      setClientNetCurrentPage(1)
+                    }
+                    return next
+                  })
+                  if (!showClientNet) setShowExchangeView(false)
+                })
+              }}
+              style={{ minWidth: '110px', width: '110px', flexShrink: 0 }}
+              className={`h-9 rounded-xl ${showClientNet ? 'bg-[#2563EB] border-[#2563EB]' : 'bg-transparent border-[#D5DEEA]'} border flex items-center justify-center gap-1.5 hover:opacity-90 transition-all`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M7 10h10M10 14h7M13 18h4" stroke={showClientNet ? "#ffffff" : "#666666"} />
+              </svg>
+              <span className={`${showClientNet ? 'text-white' : 'text-[#1F2937]'} text-[11px] font-medium font-outfit`}>NET Position</span>
+            </button>
+            <button
+              onClick={() => {
+                startTransition(() => {
+                  const next = !showExchangeView
+                  setShowExchangeView(next)
+                  if (next) setShowClientNet(false)
+                })
+              }}
+              style={{ flexShrink: 0 }}
+              className={`h-9 px-2.5 rounded-xl ${showExchangeView ? 'bg-[#2563EB] border-[#2563EB]' : 'bg-transparent border-[#D5DEEA]'} border flex items-center justify-center gap-1.5 hover:opacity-90 transition-all`}
+              title="Exchange-wise NET Position"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V10m4 11V10m6 11V10m4 11V10M12 3l9 5H3l9-5z" stroke={showExchangeView ? '#ffffff' : '#666666'} />
+              </svg>
+              <span className={`${showExchangeView ? 'text-white' : 'text-[#1F2937]'} text-[11px] font-medium font-outfit`}>Exchange</span>
+            </button>
+            {/* Percentage toggle icon button */}
+            <button
+              onClick={() => startTransition(() => setDisplayMode(m => m === 'percentage' ? 'value' : 'percentage'))}
+              title={displayMode === 'percentage' ? 'Switch to value view' : 'Switch to percentage view'}
+              className={`w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0 transition-all ${
+                displayMode === 'percentage'
+                  ? 'bg-[#2563EB] border-[#2563EB]'
+                  : 'bg-transparent border-[#D5DEEA] hover:bg-white/60'
+              }`}
+            >
+              <span className={`text-[13px] font-bold leading-none ${displayMode === 'percentage' ? 'text-white' : 'text-[#4B4B4B]'}`}>%</span>
+            </button>
+
+            {/* Download button */}
+            <button
+              onClick={handleMobileExport}
+              disabled={isExporting}
+              title={isExporting ? 'Exporting...' : showClientNet ? 'Export NET positions to CSV' : 'Export positions to CSV'}
+              className="w-9 h-9 rounded-xl border border-[#D5DEEA] bg-transparent flex items-center justify-center hover:bg-gray-50 transition-all flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isExporting
+                ? <svg className="w-4 h-4 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                : <svg className="w-4 h-4" fill="none" stroke="#4B4B4B" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-3-3m3 3l3-3M4 20h16"/></svg>
+              }
+            </button>
+
+            <button 
+              onClick={() => window.location.reload()}
+              disabled={loading.positions}
+              className="w-9 h-9 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-all flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="#4B4B4B" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+
         {/* Search and navigation */}
         {!showClientNet && !showExchangeView && (
-        <div className="mx-1 sm:mx-4 mb-1 px-3 py-3 sm:p-4">
-          <div className="flex items-center gap-1 sm:gap-2">
-            <div className="flex-1 min-w-0 h-7 sm:h-10 bg-[#F9FAFB] border border-[#E5E7EB] rounded-md px-2 sm:px-3 flex items-center gap-1.5">
-              <svg width="12" height="12" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]">
+        <div className="mx-4 mb-3">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="flex-1 min-w-0 h-10 bg-transparent border border-[#D5DEEA] rounded-xl px-3 flex items-center gap-2">
+              <svg width="15" height="15" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]">
                 <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
                 <path d="M13 13L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              <input 
-                placeholder="Search"
+              <input
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')} 
+                placeholder="Search by symbol, login..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="flex-1 min-w-0 text-[11px] sm:text-sm text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit focus:ring-0"
+                className="flex-1 min-w-0 text-[13px] sm:text-sm text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit focus:ring-0"
               />
             </div>
             <button 
               onClick={() => setIsColumnSelectorOpen(true)}
-              className="h-7 w-7 sm:h-10 sm:w-10 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors"
+              className="h-10 w-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors"
               title="Show/Hide Columns">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                 <rect x="2" y="3" width="4" height="10" rx="1" stroke="#4B5563" strokeWidth="1.2"/>
@@ -1398,13 +1310,13 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
             <button 
               onClick={() => handlePageChange(currentPage - 1, mobileRegularTotalPages)}
               disabled={currentPage === 1}
-              className="h-7 w-7 sm:h-10 sm:w-10 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-10 w-9 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
                 <path d="M12 14L8 10L12 6" stroke="#4B5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-            <div className="px-1 text-[11px] font-medium text-[#374151] flex items-center gap-1">
+            <div className="text-[13px] font-medium text-[#475569] flex items-center gap-1">
               <input
                 type="number"
                 min={1}
@@ -1417,7 +1329,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                     handlePageChange(n, maxPage)
                   }
                 }}
-                className="w-10 h-7 border border-[#E5E7EB] rounded-lg text-center text-[11px] font-semibold text-[#1F2937]"
+                className="w-10 h-10 bg-[#2563EB] text-white font-semibold border border-[#2563EB] rounded-xl text-center text-[13px] shadow-[0_4px_10px_rgba(37,99,235,0.3)] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 aria-label="Current page"
               />
               <span className="text-[#9CA3AF]">/</span>
@@ -1426,7 +1338,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
             <button 
               onClick={() => handlePageChange(currentPage + 1, mobileRegularTotalPages)}
               disabled={currentPage >= mobileRegularTotalPages}
-              className="h-7 w-7 sm:h-10 sm:w-10 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-10 w-9 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
                 <path d="M8 6L12 10L8 14" stroke="#4B5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1439,7 +1351,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
         {/* Table - full width, remove outer padding */}
         {!showClientNet && !showExchangeView && (
         <div className="flex-1 min-h-0 flex flex-col" style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}>
-          <div className="flex-1 min-h-0 flex flex-col bg-white shadow-[0_0_12px_rgba(75,75,75,0.05)] border border-[#F2F2F7] overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-col bg-transparent border border-blue-100 max-md:border-b-0 overflow-hidden">
             {/* Single scroll container with sticky header */}
             <div className="mobile-table-scroll w-full flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-hide" style={{
               WebkitOverflowScrolling: 'touch',
@@ -1500,7 +1412,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                       <div data-mobile-data-row="body" 
                         key={`skeleton-row-${i}`}
-                        className="grid text-[12px] text-[#374151] tabular-nums bg-white border-b border-[#E1E1E1]"
+                        className="grid text-[12px] text-[#374151] tabular-nums bg-transparent border-b border-[#E1E1E1]"
                         style={{
                           gap: '0px', 
                           gridGap: '0px', 
@@ -1536,7 +1448,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                   mobileRegularDisplayedPositions.map((pos, idx) => (
                     <div data-mobile-data-row="body" 
                       key={idx} 
-                      className="grid text-[12px] text-[#374151] tabular-nums bg-white border-b border-[#E1E1E1] hover:bg-[#F8FAFC] transition-colors"
+                      className="grid text-[12px] text-[#374151] tabular-nums bg-transparent border-b border-[#E1E1E1] hover:bg-white/50 transition-colors"
                       style={{
                         gap: '0px', 
                         gridGap: '0px', 
@@ -1587,18 +1499,19 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
         {/* Client NET View */}
 
         {showClientNet && isMobileView && (
-          <div className="bg-[#F5F7FA] flex flex-col flex-1 min-h-0">
+          <div className="bg-transparent flex flex-col flex-1 min-h-0">
             {/* Face Cards Carousel removed from NET Position mobile view per request */}
 
             {/* Controls with Search - SYMMETRICAL with regular Positions tab */}
             <div className="pb-3 px-4">
               <div className="flex items-center gap-1">
-                <div className="flex-1 min-w-0 h-[32px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] px-2 flex items-center gap-1.5">
+                <div className="flex-1 min-w-0 h-[32px] bg-transparent border border-[#D5DEEA] rounded-[10px] px-2 flex items-center gap-1.5">
                   <svg width="16" height="16" viewBox="0 0 18 18" fill="none" className="flex-shrink-0">
                     <circle cx="8" cy="8" r="6.5" stroke="#4B4B4B" strokeWidth="1.5"/>
                     <path d="M13 13L16 16" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
-                  <input 
+                  <input
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')} 
                     placeholder="Search" 
                     value={clientNetSearchInput}
                     onChange={(e) => setClientNetSearchInput(e.target.value)}
@@ -1607,7 +1520,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                 </div>
                 <button 
                   onClick={() => setClientNetShowColumnSelector(true)}
-                  className="w-[28px] h-[28px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50">
+                  className="w-[28px] h-[28px] bg-transparent border border-[#D5DEEA] rounded-[10px] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50">
                   <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
                     <rect x="3" y="5" width="4" height="10" stroke="#4B4B4B" strokeWidth="1.5" rx="1"/>
                     <rect x="8.5" y="5" width="4" height="10" stroke="#4B4B4B" strokeWidth="1.5" rx="1"/>
@@ -1617,7 +1530,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                 <button 
                   onClick={() => handleClientNetPageChange(clientNetCurrentPage - 1, clientNetTotalPages)}
                   disabled={clientNetCurrentPage === 1}
-                  className="w-[28px] h-[28px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-[28px] h-[28px] bg-transparent border border-[#D5DEEA] rounded-[10px] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
                     <path d="M12 14L8 10L12 6" stroke="#4B4B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1635,7 +1548,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         handleClientNetPageChange(n, clientNetTotalPages)
                       }
                     }}
-                    className="w-10 h-6 border border-[#ECECEC] rounded-[8px] text-center text-[10px]"
+                    className="w-10 h-6 border border-[#D5DEEA] rounded-[8px] bg-transparent text-center text-[10px]"
                     aria-label="Current page"
                   />
                   <span className="text-[#9CA3AF]">/</span>
@@ -1644,7 +1557,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                 <button 
                   onClick={() => handleClientNetPageChange(clientNetCurrentPage + 1, clientNetTotalPages)}
                   disabled={clientNetCurrentPage === clientNetTotalPages}
-                  className="w-[28px] h-[28px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-[28px] h-[28px] bg-transparent border border-[#D5DEEA] rounded-[10px] flex items-center justify-center transition-colors flex-shrink-0 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
                     <path d="M8 6L12 10L8 14" stroke="#4B4B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1655,9 +1568,10 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
 
             {/* Client NET Table - FIXED GRID ALIGNMENT */}
             <div className="flex-1 min-h-0 flex flex-col" style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}>
-              <div className="bg-white shadow-[0_0_12px_rgba(75,75,75,0.05)] border border-[#F2F2F7] overflow-hidden flex-1 min-h-0 flex flex-col">
+              <style>{clientNetOrderCss}</style>
+              <div className="bg-transparent border border-blue-100 max-md:border-b-0 overflow-hidden flex-1 min-h-0 flex flex-col">
                 {/* Table - single scroll container */}
-                <div className="mobile-table-scroll overflow-x-auto overflow-y-auto scrollbar-hide flex-1 min-h-0" style={{
+                <div data-net-table className="mobile-table-scroll overflow-x-auto overflow-y-auto scrollbar-hide flex-1 min-h-0" style={{
                   paddingRight: '8px',
                   paddingBottom: '0px',
                   overflowY: 'auto'
@@ -1667,24 +1581,13 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                     className="grid bg-blue-500 text-white text-[10px] font-bold uppercase tracking-wide h-[30px] sticky top-0 z-30"
                     style={{
                       minWidth: 'max-content',
-                      gridTemplateColumns: [
-                        clientNetVisibleColumns.symbol ? 'minmax(140px, 2fr)' : '',
-                        clientNetVisibleColumns.netType ? 'minmax(60px, 1fr)' : '',
-                        clientNetVisibleColumns.netVolume ? 'minmax(80px, 1fr)' : '',
-                        clientNetVisibleColumns.avgPrice ? 'minmax(80px, 1fr)' : '',
-                        clientNetVisibleColumns.currentPrice ? 'minmax(90px, 1fr)' : '',
-                        clientNetVisibleColumns.totalProfit ? 'minmax(90px, 1fr)' : '',
-                        clientNetVisibleColumns.totalStorage ? 'minmax(80px, 1fr)' : '',
-                        clientNetVisibleColumns.totalCommission ? 'minmax(80px, 1fr)' : '',
-                        clientNetVisibleColumns.loginCount ? 'minmax(70px, 1fr)' : '',
-                        clientNetVisibleColumns.totalPositions ? 'minmax(80px, 1fr)' : ''
-                      ].filter(Boolean).join(' '),
+                      gridTemplateColumns: clientNetGridTemplate,
                       gap: '0px',
                       columnGap: '0px'
                     }}
                   >
                     {clientNetVisibleColumns.symbol && (
-                      <div
+                      <div data-col="symbol"
                         className="flex items-center justify-start px-1 cursor-pointer sticky left-0 z-50 bg-blue-500"
                         onClick={(e) => { e.stopPropagation(); handleClientNetSort('symbol'); }}
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto', boxShadow: '2px 0 4px rgba(0,0,0,0.08)' }}
@@ -1698,7 +1601,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                       </div>
                     )}
                     {clientNetVisibleColumns.netType && (
-                      <div
+                      <div data-col="netType"
                         className="flex items-center justify-start px-1 cursor-pointer bg-blue-500 text-white"
                         onClick={(e) => { e.stopPropagation(); handleClientNetSort('netType'); }}
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
@@ -1712,7 +1615,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                       </div>
                     )}
                     {clientNetVisibleColumns.netVolume && (
-                      <div
+                      <div data-col="netVolume"
                         className="flex items-center justify-start px-1 cursor-pointer bg-blue-500 text-white"
                         onClick={(e) => { e.stopPropagation(); handleClientNetSort('netVolume'); }}
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
@@ -1726,7 +1629,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                       </div>
                     )}
                     {clientNetVisibleColumns.avgPrice && (
-                      <div
+                      <div data-col="avgPrice"
                         className="flex items-center justify-start px-1 cursor-pointer bg-blue-500 text-white"
                         onClick={(e) => { e.stopPropagation(); handleClientNetSort('avgPrice'); }}
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
@@ -1740,7 +1643,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                       </div>
                     )}
                     {clientNetVisibleColumns.currentPrice && (
-                      <div
+                      <div data-col="currentPrice"
                         className="flex items-center justify-start px-1 cursor-pointer bg-blue-500 text-white"
                         onClick={(e) => { e.stopPropagation(); handleClientNetSort('currentPrice'); }}
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
@@ -1754,7 +1657,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                       </div>
                     )}
                     {clientNetVisibleColumns.totalProfit && (
-                      <div
+                      <div data-col="totalProfit"
                         className="flex items-center justify-start px-1 cursor-pointer bg-blue-500 text-white"
                         onClick={(e) => { e.stopPropagation(); handleClientNetSort('totalProfit'); }}
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
@@ -1768,7 +1671,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                       </div>
                     )}
                     {clientNetVisibleColumns.totalStorage && (
-                      <div
+                      <div data-col="totalStorage"
                         className="flex items-center justify-start px-1 cursor-pointer bg-blue-500 text-white"
                         onClick={(e) => { e.stopPropagation(); handleClientNetSort('totalStorage'); }}
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
@@ -1782,7 +1685,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                       </div>
                     )}
                     {clientNetVisibleColumns.totalCommission && (
-                      <div
+                      <div data-col="totalCommission"
                         className="flex items-center justify-start px-1 cursor-pointer bg-blue-500 text-white"
                         onClick={(e) => { e.stopPropagation(); handleClientNetSort('totalCommission'); }}
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
@@ -1796,7 +1699,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                       </div>
                     )}
                     {clientNetVisibleColumns.loginCount && (
-                      <div
+                      <div data-col="loginCount"
                         className="flex items-center justify-start px-1 cursor-pointer bg-blue-500 text-white"
                         onClick={(e) => { e.stopPropagation(); handleClientNetSort('loginCount'); }}
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
@@ -1810,7 +1713,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                       </div>
                     )}
                     {clientNetVisibleColumns.totalPositions && (
-                      <div
+                      <div data-col="totalPositions"
                         className="flex items-center justify-start px-1 cursor-pointer bg-blue-500 text-white"
                         onClick={(e) => { e.stopPropagation(); handleClientNetSort('totalPositions'); }}
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
@@ -1829,31 +1732,20 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                   {(isServerNetLoading || isClientNetPageChanging) && filteredClientNetPositions.length === 0 ? (
                     <>
                       {[1, 2, 3, 4, 5, 6].map((i) => (
-                        <div data-mobile-data-row="body" key={`client-net-skeleton-${i}`} className="grid text-[12px] text-[#374151] tabular-nums bg-white border-b border-[#E1E1E1]" style={{
+                        <div data-mobile-data-row="body" key={`client-net-skeleton-${i}`} className="grid text-[12px] text-[#374151] tabular-nums bg-transparent border-b border-[#E1E1E1]" style={{
                           minWidth: 'max-content',
-                          gridTemplateColumns: [
-                            clientNetVisibleColumns.symbol ? 'minmax(140px, 2fr)' : '',
-                            clientNetVisibleColumns.netType ? 'minmax(60px, 1fr)' : '',
-                            clientNetVisibleColumns.netVolume ? 'minmax(80px, 1fr)' : '',
-                            clientNetVisibleColumns.avgPrice ? 'minmax(80px, 1fr)' : '',
-                            clientNetVisibleColumns.currentPrice ? 'minmax(90px, 1fr)' : '',
-                            clientNetVisibleColumns.totalProfit ? 'minmax(90px, 1fr)' : '',
-                            clientNetVisibleColumns.totalStorage ? 'minmax(80px, 1fr)' : '',
-                            clientNetVisibleColumns.totalCommission ? 'minmax(80px, 1fr)' : '',
-                            clientNetVisibleColumns.loginCount ? 'minmax(70px, 1fr)' : '',
-                            clientNetVisibleColumns.totalPositions ? 'minmax(80px, 1fr)' : ''
-                          ].filter(Boolean).join(' ')
+                          gridTemplateColumns: clientNetGridTemplate
                         }}>
-                          {clientNetVisibleColumns.symbol && <div className="h-[40px] flex items-center px-1 bg-white sticky left-0 z-10 border-b border-[#E1E1E1]" style={{boxShadow:'2px 0 4px rgba(0,0,0,0.05)'}}><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
-                          {clientNetVisibleColumns.netType && <div className="h-[40px] flex items-center px-1 bg-white border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
-                          {clientNetVisibleColumns.netVolume && <div className="h-[40px] flex items-center px-1 bg-white border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
-                          {clientNetVisibleColumns.avgPrice && <div className="h-[40px] flex items-center px-1 bg-white border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
-                          {clientNetVisibleColumns.currentPrice && <div className="h-[40px] flex items-center px-1 bg-white border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
-                          {clientNetVisibleColumns.totalProfit && <div className="h-[40px] flex items-center px-1 bg-white border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
-                          {clientNetVisibleColumns.totalStorage && <div className="h-[40px] flex items-center px-1 bg-white border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
-                          {clientNetVisibleColumns.totalCommission && <div className="h-[40px] flex items-center px-1 bg-white border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
-                          {clientNetVisibleColumns.loginCount && <div className="h-[40px] flex items-center px-1 bg-white border-b border-[#E1E1E1]"><div className="h-3 w-[60%] bg-gray-200 rounded animate-pulse" /></div>}
-                          {clientNetVisibleColumns.totalPositions && <div className="h-[40px] flex items-center px-1 bg-white border-b border-[#E1E1E1]"><div className="h-3 w-[60%] bg-gray-200 rounded animate-pulse" /></div>}
+                          {clientNetVisibleColumns.symbol && <div data-col="symbol" className="h-[40px] flex items-center px-1 bg-white sticky left-0 z-10 border-b border-[#E1E1E1]" style={{boxShadow:'2px 0 4px rgba(0,0,0,0.05)'}}><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
+                          {clientNetVisibleColumns.netType && <div data-col="netType" className="h-[40px] flex items-center px-1 bg-transparent border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
+                          {clientNetVisibleColumns.netVolume && <div data-col="netVolume" className="h-[40px] flex items-center px-1 bg-transparent border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
+                          {clientNetVisibleColumns.avgPrice && <div data-col="avgPrice" className="h-[40px] flex items-center px-1 bg-transparent border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
+                          {clientNetVisibleColumns.currentPrice && <div data-col="currentPrice" className="h-[40px] flex items-center px-1 bg-transparent border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
+                          {clientNetVisibleColumns.totalProfit && <div data-col="totalProfit" className="h-[40px] flex items-center px-1 bg-transparent border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
+                          {clientNetVisibleColumns.totalStorage && <div data-col="totalStorage" className="h-[40px] flex items-center px-1 bg-transparent border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
+                          {clientNetVisibleColumns.totalCommission && <div data-col="totalCommission" className="h-[40px] flex items-center px-1 bg-transparent border-b border-[#E1E1E1]"><div className="h-3 w-[70%] bg-gray-200 rounded animate-pulse" /></div>}
+                          {clientNetVisibleColumns.loginCount && <div data-col="loginCount" className="h-[40px] flex items-center px-1 bg-transparent border-b border-[#E1E1E1]"><div className="h-3 w-[60%] bg-gray-200 rounded animate-pulse" /></div>}
+                          {clientNetVisibleColumns.totalPositions && <div data-col="totalPositions" className="h-[40px] flex items-center px-1 bg-transparent border-b border-[#E1E1E1]"><div className="h-3 w-[60%] bg-gray-200 rounded animate-pulse" /></div>}
                         </div>
                       ))}
                     </>
@@ -1863,38 +1755,27 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                     clientNetPaginatedPositions.map((pos, idx) => (
                       <div data-mobile-data-row="body" key={idx} className="grid text-[12px] text-[#374151] tabular-nums hover:bg-[#F8FAFC]" style={{
                         minWidth: 'max-content',
-                        gridTemplateColumns: [
-                          clientNetVisibleColumns.symbol ? 'minmax(140px, 2fr)' : '',
-                          clientNetVisibleColumns.netType ? 'minmax(60px, 1fr)' : '',
-                          clientNetVisibleColumns.netVolume ? 'minmax(80px, 1fr)' : '',
-                          clientNetVisibleColumns.avgPrice ? 'minmax(80px, 1fr)' : '',
-                          clientNetVisibleColumns.currentPrice ? 'minmax(90px, 1fr)' : '',
-                          clientNetVisibleColumns.totalProfit ? 'minmax(90px, 1fr)' : '',
-                          clientNetVisibleColumns.totalStorage ? 'minmax(80px, 1fr)' : '',
-                          clientNetVisibleColumns.totalCommission ? 'minmax(80px, 1fr)' : '',
-                          clientNetVisibleColumns.loginCount ? 'minmax(70px, 1fr)' : '',
-                          clientNetVisibleColumns.totalPositions ? 'minmax(80px, 1fr)' : ''
-                        ].filter(Boolean).join(' ')
+                        gridTemplateColumns: clientNetGridTemplate
                       }}>
                         {clientNetVisibleColumns.symbol && (
-                          <div
+                          <div data-col="symbol"
                             className="flex items-center justify-start px-1 h-[40px] font-semibold bg-white text-black sticky left-0 z-20 border-b border-[#E1E1E1]"
                             style={{boxShadow: '2px 0 4px rgba(0,0,0,0.05)'}}
                           >
                             {pos.symbol || '-'}
                           </div>
                         )}
-                        {clientNetVisibleColumns.netType && <div className="flex items-center justify-start px-1 h-[40px] bg-white border-b border-[#E1E1E1]"><NetTypeChip type={pos.netType} compact /></div>}
-                        {clientNetVisibleColumns.netVolume && <div title={numericMode === 'compact' ? fmtMoneyFull(pos.netVolume) : undefined} className="flex items-center justify-start px-1 h-[40px] bg-white text-[#374151] border-b border-[#E1E1E1]">{fmtMoney(pos.netVolume)}</div>}
-                        {clientNetVisibleColumns.avgPrice && <div title={fmtMoneyFull(pos.avgPrice)} className="flex items-center justify-start px-1 h-[40px] bg-white text-[#374151] border-b border-[#E1E1E1]">{fmtMoneyFull(pos.avgPrice)}</div>}
-                        {clientNetVisibleColumns.currentPrice && <div title={fmtMoneyFull(pos.currentPrice)} className="flex items-center justify-start px-1 h-[40px] bg-white text-[#374151] border-b border-[#E1E1E1]">{fmtMoneyFull(pos.currentPrice)}</div>}
-                        {clientNetVisibleColumns.totalProfit && <div title={numericMode === 'compact' ? fmtMoneyFull(pos.totalProfit) : undefined} className={`flex items-center justify-start px-1 h-[40px] font-semibold bg-white border-b border-[#E1E1E1] ${
+                        {clientNetVisibleColumns.netType && <div data-col="netType" className="flex items-center justify-start px-1 h-[40px] bg-transparent border-b border-[#E1E1E1]"><NetTypeChip type={pos.netType} compact /></div>}
+                        {clientNetVisibleColumns.netVolume && <div data-col="netVolume" title={numericMode === 'compact' ? fmtMoneyFull(pos.netVolume) : undefined} className="flex items-center justify-start px-1 h-[40px] bg-transparent text-[#374151] border-b border-[#E1E1E1]">{fmtMoney(pos.netVolume)}</div>}
+                        {clientNetVisibleColumns.avgPrice && <div data-col="avgPrice" title={fmtMoneyFull(pos.avgPrice)} className="flex items-center justify-start px-1 h-[40px] bg-transparent text-[#374151] border-b border-[#E1E1E1]">{fmtMoneyFull(pos.avgPrice)}</div>}
+                        {clientNetVisibleColumns.currentPrice && <div data-col="currentPrice" title={fmtMoneyFull(pos.currentPrice)} className="flex items-center justify-start px-1 h-[40px] bg-transparent text-[#374151] border-b border-[#E1E1E1]">{fmtMoneyFull(pos.currentPrice)}</div>}
+                        {clientNetVisibleColumns.totalProfit && <div data-col="totalProfit" title={numericMode === 'compact' ? fmtMoneyFull(pos.totalProfit) : undefined} className={`flex items-center justify-start px-1 h-[40px] font-semibold bg-transparent border-b border-[#E1E1E1] ${
                           pos.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'
                         }`}>{fmtMoney(pos.totalProfit)}</div>}
-                        {clientNetVisibleColumns.totalStorage && <div title={numericMode === 'compact' ? fmtMoneyFull(pos.totalStorage || 0) : undefined} className="flex items-center justify-start px-1 h-[40px] bg-white text-[#374151] border-b border-[#E1E1E1]">{fmtMoney(pos.totalStorage || 0)}</div>}
-                        {clientNetVisibleColumns.totalCommission && <div title={numericMode === 'compact' ? fmtMoneyFull(pos.totalCommission || 0) : undefined} className="flex items-center justify-start px-1 h-[40px] bg-white text-[#374151] border-b border-[#E1E1E1]">{fmtMoney(pos.totalCommission || 0)}</div>}
-                        {clientNetVisibleColumns.loginCount && <div className="flex items-center justify-start px-1 h-[40px] bg-white text-[#374151] border-b border-[#E1E1E1]">{Number(pos.loginCount || 0)}</div>}
-                        {clientNetVisibleColumns.totalPositions && <div className="flex items-center justify-start px-1 h-[40px] bg-white text-[#374151] border-b border-[#E1E1E1]">{pos.totalPositions}</div>}
+                        {clientNetVisibleColumns.totalStorage && <div data-col="totalStorage" title={numericMode === 'compact' ? fmtMoneyFull(pos.totalStorage || 0) : undefined} className="flex items-center justify-start px-1 h-[40px] bg-transparent text-[#374151] border-b border-[#E1E1E1]">{fmtMoney(pos.totalStorage || 0)}</div>}
+                        {clientNetVisibleColumns.totalCommission && <div data-col="totalCommission" title={numericMode === 'compact' ? fmtMoneyFull(pos.totalCommission || 0) : undefined} className="flex items-center justify-start px-1 h-[40px] bg-transparent text-[#374151] border-b border-[#E1E1E1]">{fmtMoney(pos.totalCommission || 0)}</div>}
+                        {clientNetVisibleColumns.loginCount && <div data-col="loginCount" className="flex items-center justify-start px-1 h-[40px] bg-transparent text-[#374151] border-b border-[#E1E1E1]">{Number(pos.loginCount || 0)}</div>}
+                        {clientNetVisibleColumns.totalPositions && <div data-col="totalPositions" className="flex items-center justify-start px-1 h-[40px] bg-transparent text-[#374151] border-b border-[#E1E1E1]">{pos.totalPositions}</div>}
                       </div>
                     ))
                   )}
@@ -1907,6 +1788,9 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
           </div>
         )}
       </div>
+
+      {/* Bottom Navigation */}
+      <MobileBottomNav onMore={() => setIsSidebarOpen(true)} />
 
       {/* CustomizeView Modal */}
       <CustomizeViewModal
@@ -2042,108 +1926,48 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
 
       {/* Column Selector Modal */}
       {isColumnSelectorOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setIsColumnSelectorOpen(false)}>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end" onClick={() => setIsColumnSelectorOpen(false)}>
           <div 
-            className="bg-white w-full rounded-t-[24px] max-h-[100vh] flex flex-col overflow-hidden"
+            className="bg-white w-full rounded-t-[28px] max-h-[85dvh] flex flex-col overflow-hidden shadow-[0_-8px_30px_rgba(15,23,42,0.12)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between flex-shrink-0">
-              <h3 className="text-base font-semibold text-[#000000]">Show/Hide Columns</h3>
-              <button onClick={() => setIsColumnSelectorOpen(false)}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="#404040" strokeWidth="2"/>
+            <div className="pt-2.5 flex justify-center flex-shrink-0"><span className="w-10 h-1 rounded-full bg-[#CBD5E1]" /></div>
+            <div className="px-5 pt-3 pb-3 border-b border-[#D5DEEA] flex items-center justify-between gap-3 flex-shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-[18px] leading-6 font-extrabold tracking-tight text-[#0F172A] truncate">Columns</h3>
+                <p className="text-[12px] text-[#64748B] truncate">Show, hide & reorder columns</p>
+              </div>
+              <button onClick={() => setIsColumnSelectorOpen(false)} aria-label="Close" className="w-10 h-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="#0F172A" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
             </div>
 
-            <div className="px-5 py-3 border-b border-[#E5E7EB] flex-shrink-0">
-              <div className="relative h-12">
-                <input
-                  type="text"
-                  placeholder="Search Columns"
-                  value={columnSearch}
-                  onChange={(e) => setColumnSearch(e.target.value)}
-                  className="w-full h-12 pl-12 pr-4 bg-gray-100 border-0 rounded-xl text-[10px] text-black font-semibold font-outfit placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <svg 
-                  width="20" 
-                  height="20" 
-                  viewBox="0 0 20 20" 
-                  fill="none" 
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-                >
-                  <circle cx="8.5" cy="8.5" r="5.75" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M13 13L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto min-h-[450px] max-h-[55vh]">
-              <div className="px-5 py-3">
-                {(() => {
-                  const allColumns = [
-                    { label: 'Login', key: 'login' },
-                    { label: 'Time', key: 'updated' },
-                    { label: 'First Name', key: 'firstName' },
-                    { label: 'Middle Name', key: 'middleName' },
-                    { label: 'Last Name', key: 'lastName' },
-                    { label: 'Email', key: 'email' },
-                    { label: 'Phone', key: 'phone' },
-                    { label: 'Position', key: 'position' },
-                    { label: 'Symbol', key: 'symbol' },
-                    ...(isMobileView
-                      ? [{ label: 'Action', key: 'netType' }]
-                      : [
-                          { label: 'Action', key: 'action' },
-                          { label: 'Action', key: 'netType' }
-                        ]),
-                    { label: 'Volume', key: 'volume' },
-                    { label: 'Volume %', key: 'volumePercentage' },
-                    { label: 'Open Price', key: 'priceOpen' },
-                    { label: 'Price Current', key: 'priceCurrent' },
-                    { label: 'Net Volume', key: 'netVolume' },
-                    { label: 'S/L', key: 'sl' },
-                    { label: 'T/P', key: 'tp' },
-                    { label: 'Profit', key: 'profit' },
-                    { label: 'Total Profit', key: 'totalProfit' },
-                    { label: 'Profit %', key: 'profitPercentage' },
-                    { label: 'Swap', key: 'storage' },
-                    { label: 'Swap %', key: 'storagePercentage' },
-                    { label: 'Applied %', key: 'appliedPercentage' },
-                    { label: 'Reason', key: 'reason' },
-                    { label: 'Comment', key: 'comment' },
-                    { label: 'Commission', key: 'commission' }
-                  ]
+            {/* Scoped restyle of the shared ColumnChooserList to match the mobile theme */}
+            <style>{`
+              .c2-col-chooser > div > div { border-color: #D5DEEA !important; }
+              .c2-col-chooser input[type="text"] { background: transparent !important; border-color: #D5DEEA !important; border-radius: 12px !important; height: 40px; font-size: 13px !important; }
+              .c2-col-chooser input[type="checkbox"] { width: 16px !important; height: 16px !important; accent-color: #2563EB; border-radius: 4px; }
+              .c2-col-chooser .overscroll-contain > [data-col-key] { padding-top: 10px; padding-bottom: 10px; margin-left: 12px; margin-right: 12px; border-radius: 0; border-bottom: 1px solid rgba(213, 222, 234, 0.6); }
+              .c2-col-chooser .overscroll-contain > [data-col-key] label span { font-size: 13px !important; color: #1F2937 !important; }
+            `}</style>
+            <div className="c2-col-chooser flex-1 min-h-0 flex flex-col">
+              <ColumnChooserList
+                columns={(() => {
+                  const allColumns = [ { label: 'Login', key: 'login' }, { label: 'Time', key: 'updated' }, { label: 'First Name', key: 'firstName' }, { label: 'Middle Name', key: 'middleName' }, { label: 'Last Name', key: 'lastName' }, { label: 'Email', key: 'email' }, { label: 'Phone', key: 'phone' }, { label: 'Position', key: 'position' }, { label: 'Symbol', key: 'symbol' }, ...(isMobileView ? [{ label: 'Action', key: 'netType' }] : [ { label: 'Action', key: 'action' }, { label: 'Action', key: 'netType' } ]), { label: 'Volume', key: 'volume' }, { label: 'Volume %', key: 'volumePercentage' }, { label: 'Open Price', key: 'priceOpen' }, { label: 'Price Current', key: 'priceCurrent' }, { label: 'Net Volume', key: 'netVolume' }, { label: 'S/L', key: 'sl' }, { label: 'T/P', key: 'tp' }, { label: 'Profit', key: 'profit' }, { label: 'Total Profit', key: 'totalProfit' }, { label: 'Profit %', key: 'profitPercentage' }, { label: 'Swap', key: 'storage' }, { label: 'Swap %', key: 'storagePercentage' }, { label: 'Applied %', key: 'appliedPercentage' }, { label: 'Reason', key: 'reason' }, { label: 'Comment', key: 'comment' }, { label: 'Commission', key: 'commission' } ]
                   const excludedOnMobile = new Set(['firstName','middleName','lastName','email','phone'])
-                  const filtered = allColumns
-                    .filter(col => col.label.toLowerCase().includes(columnSearch.toLowerCase()))
-                    .filter(col => !isMobileView || !excludedOnMobile.has(col.key))
-                  return filtered.length > 0 ? (
-                    filtered.map(col => (
-                      <label 
-                        key={col.key} 
-                        className="flex items-center justify-between py-3 border-b border-[#F2F2F7] last:border-0"
-                      >
-                        <span className="text-sm text-[#000000] font-outfit">{col.label}</span>
-                        <div className="relative inline-block w-12 h-6">
-                          <input
-                            type="checkbox"
-                            checked={visibleColumns[col.key]}
-                            onChange={() => setVisibleColumns(prev => ({ ...prev, [col.key]: !prev[col.key] }))}
-                            className="sr-only peer"
-                          />
-                          <div className="w-12 h-6 bg-gray-300 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
-                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-6"></div>
-                        </div>
-                      </label>
-                    ))
-                  ) : (
-                    <div className="flex items-center justify-center py-8 text-gray-400 text-sm">
-                      No columns match your search
-                    </div>
-                  )
+                  return allColumns.filter(col => !isMobileView || !excludedOnMobile.has(col.key))
                 })()}
-              </div>
+                visibleColumns={visibleColumns}
+                onToggle={(key) => setVisibleColumns(prev => ({ ...prev, [key]: !prev[key] }))}
+                columnOrder={positionsColumnOrder}
+                onReorder={setPositionsColumnOrder}
+                onResetOrder={() => setPositionsColumnOrder(null)}
+                accent="blue"
+                title={null}
+                reorderMode="touch"
+              />
             </div>
           </div>
         </div>
@@ -2151,52 +1975,44 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
 
       {/* Client Net Column Selector Modal */}
       {clientNetShowColumnSelector && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setClientNetShowColumnSelector(false)}>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end" onClick={() => setClientNetShowColumnSelector(false)}>
           <div 
-            className="bg-white w-full rounded-t-[24px] max-h-[75vh] flex flex-col overflow-hidden"
+            className="bg-white w-full rounded-t-[28px] max-h-[85dvh] flex flex-col overflow-hidden shadow-[0_-8px_30px_rgba(15,23,42,0.12)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between flex-shrink-0">
-              <h3 className="text-base font-semibold text-[#000000]">Show/Hide Columns</h3>
-              <button onClick={() => setClientNetShowColumnSelector(false)}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="#404040" strokeWidth="2"/>
+            <div className="pt-2.5 flex justify-center flex-shrink-0"><span className="w-10 h-1 rounded-full bg-[#CBD5E1]" /></div>
+            <div className="px-5 pt-3 pb-3 border-b border-[#D5DEEA] flex items-center justify-between gap-3 flex-shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-[18px] leading-6 font-extrabold tracking-tight text-[#0F172A] truncate">Columns</h3>
+                <p className="text-[12px] text-[#64748B] truncate">Show, hide & reorder columns</p>
+              </div>
+              <button onClick={() => setClientNetShowColumnSelector(false)} aria-label="Close" className="w-10 h-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="#0F172A" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
-              <div className="px-5 py-3">
-                {[
-                  { key: 'symbol', label: 'Symbol' },
-                  { key: 'netType', label: 'NET Type' },
-                  { key: 'netVolume', label: 'NET Volume' },
-                  { key: 'avgPrice', label: 'Avg Price' },
-                  { key: 'currentPrice', label: 'Current Price' },
-                  { key: 'totalProfit', label: 'Total Profit' },
-                  { key: 'totalStorage', label: 'Swap' },
-                  { key: 'totalCommission', label: 'Total Commission' },
-                  { key: 'loginCount', label: 'Logins' },
-                  { key: 'totalPositions', label: 'Positions' }
-                ].map(({ key, label }) => (
-                  <label 
-                    key={key} 
-                    className="flex items-center justify-between py-3 border-b border-[#F2F2F7] last:border-0"
-                  >
-                    <span className="text-sm text-[#000000] font-outfit">{label}</span>
-                    <div className="relative inline-block w-12 h-6">
-                      <input
-                        type="checkbox"
-                        checked={clientNetVisibleColumns[key]}
-                        onChange={() => setClientNetVisibleColumns(prev => ({ ...prev, [key]: !prev[key] }))}
-                        className="sr-only peer"
-                      />
-                      <div className="w-12 h-6 bg-gray-300 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
-                      <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-6"></div>
-                    </div>
-                  </label>
-                ))}
-              </div>
+            {/* Scoped restyle of the shared ColumnChooserList to match the mobile theme */}
+            <style>{`
+              .c2-col-chooser > div > div { border-color: #D5DEEA !important; }
+              .c2-col-chooser input[type="text"] { background: transparent !important; border-color: #D5DEEA !important; border-radius: 12px !important; height: 40px; font-size: 13px !important; }
+              .c2-col-chooser input[type="checkbox"] { width: 16px !important; height: 16px !important; accent-color: #2563EB; border-radius: 4px; }
+              .c2-col-chooser .overscroll-contain > [data-col-key] { padding-top: 10px; padding-bottom: 10px; margin-left: 12px; margin-right: 12px; border-radius: 0; border-bottom: 1px solid rgba(213, 222, 234, 0.6); }
+              .c2-col-chooser .overscroll-contain > [data-col-key] label span { font-size: 13px !important; color: #1F2937 !important; }
+            `}</style>
+            <div className="c2-col-chooser flex-1 min-h-0 flex flex-col">
+              <ColumnChooserList
+                columns={CLIENT_NET_COLUMNS.map(({ key, label }) => ({ key, label }))}
+                visibleColumns={clientNetVisibleColumns}
+                onToggle={(key) => setClientNetVisibleColumns(prev => ({ ...prev, [key]: !prev[key] }))}
+                columnOrder={clientNetColumnOrder}
+                onReorder={setClientNetColumnOrder}
+                onResetOrder={() => setClientNetColumnOrder(null)}
+                accent="blue"
+                title={null}
+                reorderMode="touch"
+              />
             </div>
           </div>
         </div>

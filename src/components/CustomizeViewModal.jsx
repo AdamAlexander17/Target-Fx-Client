@@ -39,7 +39,7 @@ const CustomizeViewModal = ({
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.35)',
+          background: 'rgba(15, 23, 42, 0.45)',
           zIndex: 9998,
         }}
         onClick={onClose}
@@ -57,7 +57,8 @@ const CustomizeViewModal = ({
           height: 'auto',
           maxHeight: '90vh',
           background: '#FFFFFF',
-          borderRadius: '20px 20px 0 0',
+          borderRadius: '28px 28px 0 0',
+          boxShadow: '0 -8px 30px rgba(15, 23, 42, 0.12)',
           zIndex: 9999,
           display: 'flex',
           flexDirection: 'column',
@@ -66,9 +67,9 @@ const CustomizeViewModal = ({
         {/* Top indicator line */}
         <div
           style={{
-            width: '47px',
-            height: '2px',
-            background: 'rgba(71, 84, 103, 0.55)',
+            width: '40px',
+            height: '4px',
+            background: '#CBD5E1',
             borderRadius: '2px',
             margin: '10px auto',
           }}
@@ -87,10 +88,16 @@ const CustomizeViewModal = ({
           <button
             onClick={onClose}
             style={{
-              background: 'none',
-              border: 'none',
+              background: 'transparent',
+              border: '1px solid #D5DEEA',
+              borderRadius: '12px',
               cursor: 'pointer',
-              padding: '5px',
+              width: '36px',
+              height: '36px',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
             <svg
@@ -113,18 +120,18 @@ const CustomizeViewModal = ({
           <h2
             style={{
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 600,
+              fontWeight: 800,
               fontSize: '18px',
               lineHeight: '24px',
-              color: '#4B4B4B',
-              letterSpacing: '-0.0041em',
+              color: '#0F172A',
+              letterSpacing: '-0.02em',
               margin: 0,
             }}
           >
             Customize view
           </h2>
 
-          <div style={{ width: '18px' }} /> {/* Spacer for centering */}
+          <div style={{ width: '36px' }} /> {/* Spacer for centering */}
         </div>
 
         {/* Divider line */}
@@ -132,7 +139,7 @@ const CustomizeViewModal = ({
           style={{
             width: '100%',
             height: '1px',
-            background: '#F2F2F7',
+            background: '#D5DEEA',
             marginBottom: '20px',
           }}
         />
@@ -149,11 +156,12 @@ const CustomizeViewModal = ({
                   alignItems: 'center',
                   gap: '10px',
                   width: '100%',
-                  padding: '10px 0',
-                  background: 'none',
-                  border: 'none',
+                  padding: '12px 14px',
+                  background: 'transparent',
+                  border: '1px solid #D5DEEA',
+                  borderRadius: '14px',
                   cursor: 'pointer',
-                  marginBottom: '12px',
+                  marginBottom: '0',
                 }}
               >
                 <div
@@ -163,14 +171,14 @@ const CustomizeViewModal = ({
                     justifyContent: 'center',
                     width: '32px',
                     height: '32px',
-                    background: 'rgba(230, 238, 248, 0.44)',
-                    borderRadius: '8px',
+                    background: '#DBEAFE',
+                    borderRadius: '10px',
                   }}
                 >
                   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                     <path
                       d="M4 6h10M2 3h14M6 9h6"
-                      stroke="#999999"
+                      stroke="#2563EB"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                     />
@@ -179,10 +187,10 @@ const CustomizeViewModal = ({
                 <span
                   style={{
                     fontFamily: 'Outfit, sans-serif',
-                    fontWeight: 400,
-                    fontSize: '16px',
+                    fontWeight: 600,
+                    fontSize: '15px',
                     lineHeight: '20px',
-                    color: '#1B2D45',
+                    color: '#0F172A',
                     textAlign: 'left',
                   }}
                 >
@@ -195,8 +203,8 @@ const CustomizeViewModal = ({
                 style={{
                   width: '100%',
                   height: '1px',
-                  background: '#F2F2F7',
-                  margin: '12px 0',
+                  background: 'transparent',
+                  margin: '2px 0',
                 }}
               />
             </>
@@ -212,11 +220,12 @@ const CustomizeViewModal = ({
                   alignItems: 'center',
                   gap: '10px',
                   width: '100%',
-                  padding: '10px 0',
-                  background: 'none',
-                  border: 'none',
+                  padding: '12px 14px',
+                  background: 'transparent',
+                  border: '1px solid #D5DEEA',
+                  borderRadius: '14px',
                   cursor: 'pointer',
-                  marginBottom: '12px',
+                  marginBottom: '0',
                 }}
               >
                 <div
@@ -226,14 +235,14 @@ const CustomizeViewModal = ({
                     justifyContent: 'center',
                     width: '32px',
                     height: '32px',
-                    background: 'rgba(230, 238, 248, 0.44)',
-                    borderRadius: '8px',
+                    background: '#DBEAFE',
+                    borderRadius: '10px',
                   }}
                 >
                   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                     <path
                       d="M3 6L7.5 2L12 6L16.5 2"
-                      stroke="#999999"
+                      stroke="#2563EB"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                   strokeLinejoin="round"
@@ -244,7 +253,7 @@ const CustomizeViewModal = ({
                   width="4"
                   height="8"
                   rx="1"
-                  stroke="#999999"
+                  stroke="#2563EB"
                   strokeWidth="1.5"
                 />
                 <rect
@@ -253,7 +262,7 @@ const CustomizeViewModal = ({
                   width="4"
                   height="10"
                   rx="1"
-                  stroke="#999999"
+                  stroke="#2563EB"
                   strokeWidth="1.5"
                 />
                 <rect
@@ -262,7 +271,7 @@ const CustomizeViewModal = ({
                   width="4"
                   height="6"
                   rx="1"
-                  stroke="#999999"
+                  stroke="#2563EB"
                   strokeWidth="1.5"
                 />
               </svg>
@@ -270,10 +279,10 @@ const CustomizeViewModal = ({
             <span
               style={{
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '16px',
+                fontWeight: 600,
+                fontSize: '15px',
                 lineHeight: '20px',
-                color: '#1B2D45',
+                color: '#0F172A',
                 textAlign: 'left',
               }}
             >
@@ -286,8 +295,8 @@ const CustomizeViewModal = ({
             style={{
               width: '100%',
               height: '1px',
-              background: '#F2F2F7',
-              margin: '12px 0',
+              background: 'transparent',
+              margin: '2px 0',
             }}
           />
             </>
@@ -305,9 +314,10 @@ const CustomizeViewModal = ({
               alignItems: 'center',
               gap: '10px',
               width: '100%',
-              padding: '10px 0',
-              background: 'none',
-              border: 'none',
+              padding: '12px 14px',
+              background: 'transparent',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
               cursor: 'pointer',
             }}
           >
@@ -318,29 +328,29 @@ const CustomizeViewModal = ({
                 justifyContent: 'center',
                 width: '32px',
                 height: '32px',
-                background: 'rgba(230, 238, 248, 0.44)',
-                borderRadius: '8px',
+                background: '#DBEAFE',
+                borderRadius: '10px',
               }}
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <path
                   d="M6 7.5C7.65685 7.5 9 6.15685 9 4.5C9 2.84315 7.65685 1.5 6 1.5C4.34315 1.5 3 2.84315 3 4.5C3 6.15685 4.34315 7.5 6 7.5Z"
-                  stroke="#999999"
+                  stroke="#2563EB"
                   strokeWidth="1.5"
                 />
                 <path
                   d="M12 7.5C13.6569 7.5 15 6.15685 15 4.5C15 2.84315 13.6569 1.5 12 1.5C10.3431 1.5 9 2.84315 9 4.5C9 6.15685 10.3431 7.5 12 7.5Z"
-                  stroke="#999999"
+                  stroke="#2563EB"
                   strokeWidth="1.5"
                 />
                 <path
                   d="M6 16.5C7.65685 16.5 9 15.1569 9 13.5C9 11.8431 7.65685 10.5 6 10.5C4.34315 10.5 3 11.8431 3 13.5C3 15.1569 4.34315 16.5 6 16.5Z"
-                  stroke="#999999"
+                  stroke="#2563EB"
                   strokeWidth="1.5"
                 />
                 <path
                   d="M12 16.5C13.6569 16.5 15 15.1569 15 13.5C15 11.8431 13.6569 10.5 12 10.5C10.3431 10.5 9 11.8431 9 13.5C9 15.1569 10.3431 16.5 12 16.5Z"
-                  stroke="#999999"
+                  stroke="#2563EB"
                   strokeWidth="1.5"
                 />
               </svg>
@@ -348,10 +358,10 @@ const CustomizeViewModal = ({
             <span
               style={{
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '16px',
+                fontWeight: 600,
+                fontSize: '15px',
                 lineHeight: '20px',
-                color: '#1B2D45',
+                color: '#0F172A',
                 textAlign: 'left',
               }}
             >
@@ -367,8 +377,8 @@ const CustomizeViewModal = ({
           style={{
             width: '100%',
             height: '1px',
-            background: '#F2F2F7',
-            margin: '20px 0',
+            background: '#D5DEEA',
+            margin: '16px 0',
           }}
         />
 
@@ -388,19 +398,19 @@ const CustomizeViewModal = ({
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              padding: '10px 16px',
-              background: '#E5E7EB',
-              border: '1px solid #D1D5DB',
-              borderRadius: '20px',
-              boxShadow: '0px 0px 50px rgba(0, 0, 0, 0.05)',
+              padding: '12px 16px',
+              background: 'transparent',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
+              boxShadow: 'none',
               cursor: 'pointer',
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 400,
-              fontSize: '12px',
+              fontWeight: 600,
+              fontSize: '14px',
               lineHeight: '20px',
-              letterSpacing: '0.06em',
+              letterSpacing: '0.01em',
               textTransform: 'capitalize',
-              color: '#6B7280',
+              color: '#334155',
             }}
           >
             Reset
@@ -415,19 +425,19 @@ const CustomizeViewModal = ({
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              padding: '10px 27px',
-              background: (hasInteracted || hasPendingChanges) ? '#2563EB' : '#E5E7EB',
-              border: '1px solid ' + ((hasInteracted || hasPendingChanges) ? '#2563EB' : '#D1D5DB'),
-              borderRadius: '20px',
-              boxShadow: '0px 0px 50px rgba(0, 0, 0, 0.05)',
+              padding: '12px 16px',
+              background: (hasInteracted || hasPendingChanges) ? '#2563EB' : 'rgba(37, 99, 235, 0.28)',
+              border: '1px solid ' + ((hasInteracted || hasPendingChanges) ? '#2563EB' : 'transparent'),
+              borderRadius: '14px',
+              boxShadow: 'none',
               cursor: (hasInteracted || hasPendingChanges) ? 'pointer' : 'not-allowed',
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 400,
-              fontSize: '12px',
+              fontWeight: 600,
+              fontSize: '14px',
               lineHeight: '20px',
-              letterSpacing: '0.06em',
+              letterSpacing: '0.01em',
               textTransform: 'capitalize',
-              color: (hasInteracted || hasPendingChanges) ? '#FFFFFF' : '#6B7280',
+              color: (hasInteracted || hasPendingChanges) ? '#FFFFFF' : '#FFFFFF',
             }}
           >
             Apply

@@ -12,7 +12,7 @@ Only these build outputs can be copied:
 - `favicon-icon.png`
 - `index.html`
 - `manifest.webmanifest`
-- `registerSW.js`
+- `pwa-192x192.png` and `pwa-512x512.png` (referenced by the web app manifest)
 - `vite.svg`
 - `sw.js`
 - Generated `workbox-<hash>.js` files (the hash can change on a new build)

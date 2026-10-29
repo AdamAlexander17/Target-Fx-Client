@@ -15,7 +15,6 @@ const POLL_MS = 3000
 const MOBILE_ROWS_PER_EXCHANGE = 10
 const MOBILE_TABLE_MAX_HEIGHT = 28 + 34 + MOBILE_ROWS_PER_EXCHANGE * 34 + 1
 // Reserve room for the mobile header, toolbar, and 68px summary card row.
-const MOBILE_VIEW_HEIGHT = 'max(180px, calc(var(--app-viewport-height, 100dvh) - 218px))'
 
 const formatNumber = (value, digits = 2) => {
   const number = Number(value)
@@ -252,7 +251,7 @@ const ExchangeNetPositions = forwardRef(({ variant = 'desktop', displayMode = 'v
       <button
         type="button"
         onClick={() => setExchangeMenuOpen(v => !v)}
-        className={`${isMobile ? 'h-[28px] px-2 text-[10px] rounded-[10px]' : 'h-10 px-3 text-xs rounded-lg'} bg-white border border-[#E5E7EB] shadow-sm flex items-center gap-1.5 font-medium text-[#374151] hover:bg-gray-50 whitespace-nowrap`}
+        className={`${isMobile ? 'h-10 px-3 text-[12px] rounded-xl bg-transparent border border-[#D5DEEA]' : 'h-10 px-3 text-xs rounded-lg bg-white border border-[#E5E7EB] shadow-sm'} flex items-center gap-1.5 font-medium text-[#374151] hover:bg-gray-50 whitespace-nowrap`}
         aria-label="Filter exchanges"
         title="Filter exchanges"
         aria-expanded={exchangeMenuOpen}
@@ -297,23 +296,24 @@ const ExchangeNetPositions = forwardRef(({ variant = 'desktop', displayMode = 'v
   if (isMobile) {
     const grid = '130px 64px 90px 96px 104px 96px 60px 76px'
     return (
-      <div className="bg-[#F5F7FA] flex flex-col" style={{ height: MOBILE_VIEW_HEIGHT }}>
+      <div className="bg-transparent flex flex-col flex-1 min-h-0">
         {exportOverlay}
         <div className="pb-3 px-4 flex-shrink-0">
-          <div className="flex items-center gap-1">
-            <div className="w-[55%] max-w-[200px] min-w-0 mr-auto h-[32px] bg-white border border-[#ECECEC] rounded-[10px] shadow-[0_0_12px_rgba(75,75,75,0.05)] px-2 flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <div className="flex-1 min-w-0 h-10 bg-transparent border border-[#D5DEEA] rounded-xl px-3 flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 18 18" fill="none" className="flex-shrink-0"><circle cx="8" cy="8" r="6.5" stroke="#4B4B4B" strokeWidth="1.5" /><path d="M13 13L16 16" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round" /></svg>
-              <input placeholder="Search symbol" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="flex-1 min-w-0 text-[11px] text-[#000000] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit" />
+              <input
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')} placeholder="Search symbol" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="flex-1 min-w-0 text-[13px] text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit" />
             </div>
             {exchangeFilter}
           </div>
         </div>
 
         {/* Whole list scrolls vertically; each exchange shows up to 10 rows and scrolls inside */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-8 space-y-2" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-8 space-y-3" style={{ WebkitOverflowScrolling: 'touch' }}>
           {!hasFetched ? (
             Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className="bg-white rounded-lg border border-blue-100 overflow-hidden">
+              <div key={i} className="bg-transparent rounded-2xl border border-[#D5DEEA] overflow-hidden">
                 <div className="h-9 bg-blue-50 animate-pulse" />
                 {Array.from({ length: 4 }, (_, r) => <div key={r} className="h-[34px] border-b border-[#F0F0F0] px-2 flex items-center"><div className="h-3 w-3/4 bg-gray-200 rounded animate-pulse" /></div>)}
               </div>
@@ -323,11 +323,11 @@ const ExchangeNetPositions = forwardRef(({ variant = 'desktop', displayMode = 'v
             const profit = Number(group.totals.totalProfit ?? group.totals.profit ?? 0)
             const volume = Number(group.totals.netVolume ?? group.totals.volume ?? 0)
             return (
-              <div key={group.exchange} className="relative isolate bg-white rounded-lg border border-blue-100 overflow-hidden shadow-sm">
-                <button type="button" onClick={() => toggleCollapsed(group.exchange)} aria-expanded={!isCollapsed} className="relative z-40 w-full h-9 px-3 flex items-center gap-2 bg-blue-50 text-left">
+              <div key={group.exchange} className="relative isolate bg-transparent rounded-2xl border border-[#D5DEEA] overflow-hidden">
+                <button type="button" onClick={() => toggleCollapsed(group.exchange)} aria-expanded={!isCollapsed} className="relative z-40 w-full h-11 px-3.5 flex items-center gap-2 bg-[#2563EB]/[0.06] text-left">
                   <svg className={`w-3.5 h-3.5 text-blue-600 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  <span className="text-[12px] font-bold text-[#1A63BC]">{group.exchange}</span>
-                  <span className="text-[10px] text-[#6B7280]">{group.positions.length} symbols</span>
+                  <span className="text-[14px] font-extrabold tracking-tight text-[#1D4ED8]">{group.exchange}</span>
+                  <span className="text-[11px] text-[#64748B]">{group.positions.length} symbols</span>
                 </button>
                 {!isCollapsed && (
                   <div className="mobile-table-scroll relative isolate overflow-auto" style={{ contain: 'paint', maxHeight: MOBILE_TABLE_MAX_HEIGHT, WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
@@ -351,7 +351,7 @@ const ExchangeNetPositions = forwardRef(({ variant = 'desktop', displayMode = 'v
                         <div className="h-[34px] flex items-center px-1.5 bg-blue-50 text-[#374151]">{group.totals.positionCount ?? group.totals.totalPositions ?? ''}</div>
                       </div>
                       {group.positions.map((p, index) => (
-                        <div data-mobile-data-row="body" key={`${p.symbol}-${index}`} className="grid text-[12px] text-[#374151] tabular-nums bg-white border-b border-[#E1E1E1]" style={{ gridTemplateColumns: grid }}>
+                        <div data-mobile-data-row="body" key={`${p.symbol}-${index}`} className="grid text-[12px] text-[#374151] tabular-nums bg-transparent border-b border-[#E1E1E1]" style={{ gridTemplateColumns: grid }}>
                           <div className="h-[34px] flex items-center px-2 sticky left-0 bg-white z-10 font-semibold text-[#1F2937] min-w-0" style={{ boxShadow: '2px 0 4px rgba(0,0,0,0.05)' }}><span className="truncate">{p.symbol}</span></div>
                           <div className="h-[34px] flex items-center px-1.5"><NetTypeChip type={p.netType} compact /></div>
                           <div className="h-[34px] flex items-center px-1.5">{formatNumber(p.netVolume)}</div>

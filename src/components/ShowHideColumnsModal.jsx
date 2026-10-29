@@ -152,7 +152,8 @@ const ShowHideColumnsModal = ({
             }}
           >
             <input
-              type="text"
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')}
+             
               placeholder="Search Columns"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

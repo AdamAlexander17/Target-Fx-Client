@@ -2689,7 +2689,7 @@ const ClientPositionsModal = ({ client, onClose, allPositionsCache, allOrdersCac
                         {[
                           { label: 'Equity',           value: fmtMoney(equity),                                       color: 'text-blue-600' },
                           { label: 'Margin Level',     value: marginLevel > 0 ? String(marginLevel) : '-',   color: marginLevel > 0 && marginLevel < 50 ? 'text-red-500' : 'text-green-600' },
-                          { label: 'Total Commission', value: fmtMoney(commission),                                    color: 'text-blue-600' },
+                          { label: 'This week commission', value: fmtMoney(commission),                                    color: 'text-blue-600' },
                         ].map(({ label, value, color }, i) => (
                           <div key={label} className={i === 0 ? 'pr-4' : 'px-4'}>
                             <p className="text-[10px] text-slate-400 mb-1">{label}</p>

@@ -1,11 +1,10 @@
-import { drawerTapGuard } from '../utils/drawerTapGuard'
+import Sidebar from './Sidebar'
 import BrokerCreditSummary from './BrokerCreditSummary'
+import MobileBottomNav from './MobileBottomNav'
 import { createLatestRequest } from '../utils/latestRequest'
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { AskAiIcon, ReportsIcon, ReportSubIcon, TutorialIcon, BrokerageCalcIcon } from './ReportIcons'
-import { useNavigate } from 'react-router-dom'
 import { useData } from '../contexts/dataContextStore'
-import { useAuth } from '../contexts/authContextStore'
 import { brokerAPI } from '../services/api'
 import CustomizeViewModal from './CustomizeViewModal'
 import FilterModal from './FilterModal'
@@ -46,12 +45,9 @@ const formatCompactIndian = (v) => {
 const formatTime = (ts) => apiFormatTime(ts, '-')
 
 export default function PendingOrdersModule() {
-  const navigate = useNavigate()
-  const { logout } = useAuth()
   const { orders, clients, rawClients, loading, positions } = useData()
   const { groups, deleteGroup, getActiveGroupFilter, setActiveGroupFilter, filterByActiveGroup, getGroupLogins, activeGroupFilters } = useGroups()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [mobileReportsOpen, setMobileReportsOpen] = useState(false)
   const [numericMode, setNumericMode] = useState(() => { try { const s = localStorage.getItem('globalDisplayMode'); return s === 'full' ? 'full' : 'compact' } catch { return 'compact' } })
 
   const [searchInput, setSearchInput] = useState('')
@@ -617,19 +613,25 @@ value = order.type || '-'
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#F8F8F8] overflow-hidden" style={{ height: 'var(--app-viewport-height, 100dvh)' }}>
+    <div className="h-screen flex flex-col bg-white overflow-hidden" style={{ height: 'var(--app-viewport-height, 100dvh)' }}>
       {/* Header */}
-      <div className="flex-wrap flex items-center px-4 py-4 bg-white border-b border-[#ECECEC] relative">
+      <div className="flex-wrap flex items-center gap-3 px-4 pt-4 pb-2 bg-transparent relative">
         <button 
           onClick={() => setIsSidebarOpen(true)}
-          className="w-12 h-12 rounded-2xl bg-[#F8F8F8] flex items-center justify-center"
+          className="w-12 h-12 flex-shrink-0 rounded-2xl bg-transparent border border-[#D5DEEA] flex items-center justify-center"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         </button>
 
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="text-xl font-semibold text-black transform min-w-0 max-sm:text-sm">Pending Orders</h1><BrokerCreditSummary variant="header" /></div>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[22px] leading-7 font-extrabold tracking-tight text-[#0F172A] truncate">Pending Orders</h1>
+            <p className="text-[12px] text-[#64748B] truncate">Monitor all pending orders</p>
+          </div>
+          <BrokerCreditSummary variant="header" />
+        </div>
         {/* Hide profile avatar on mobile widths */}
         <div className="hidden md:flex w-12 h-12 rounded-full bg-blue-600 items-center justify-center ml-auto">
           <span className="text-white text-sm font-semibold">U</span>
@@ -641,173 +643,16 @@ value = order.type || '-'
 </div>
 
       {/* Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setIsSidebarOpen(false)}>
-          <div 
-            className="absolute left-0 top-0 bottom-0 w-[300px] bg-white flex flex-col shadow-xl rounded-r-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-4 border-b border-[#ECECEC]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
-                  <span className="text-white text-sm font-semibold">BE</span>
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-[#000000]">Broker Eye</div>
-                  <div className="text-xs text-[#404040]">Financial Dashboard</div>
-                </div>
-              </div>
-              <button onClick={() => setIsSidebarOpen(false)}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="#404040" strokeWidth="2"/>
-                </svg>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-auto py-2" {...drawerTapGuard}>
-              {/* Compact / Full display mode toggle */}
-              <div className="px-3 pb-3 pt-1">
-                <p className="text-[9px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1.5 px-1">Display Mode</p>
-                <div className="flex items-center bg-[#F3F4F6] p-0.5 w-full rounded">
-                  <button type="button" onClick={() => { setNumericMode('compact'); try { localStorage.setItem('globalDisplayMode','compact') } catch { /* Retain the fallback when this operation is unavailable. */ } try { window.dispatchEvent(new CustomEvent('globalDisplayModeChanged',{detail:'compact'})) } catch { /* Retain the fallback when this operation is unavailable. */ } }} className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${numericMode==='compact'?'bg-[#3B5BDB] text-white shadow-sm':'text-[#374151] hover:bg-white/70'}`}>Compact</button>
-                  <button type="button" onClick={() => { setNumericMode('full'); try { localStorage.setItem('globalDisplayMode','full') } catch { /* Retain the fallback when this operation is unavailable. */ } try { window.dispatchEvent(new CustomEvent('globalDisplayModeChanged',{detail:'full'})) } catch { /* Retain the fallback when this operation is unavailable. */ } }} className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${numericMode==='full'?'bg-[#3B5BDB] text-white shadow-sm':'text-[#374151] hover:bg-white/70'}`}>Full</button>
-                </div>
-              </div>
-              <div className="border-t border-[#ECECEC] mb-2" />
-              <nav className="flex flex-col">
-                {[
-                  {label:'Clients', path:'/client2', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="3" stroke="#404040"/><circle cx="16" cy="8" r="3" stroke="#404040"/><path d="M3 20c0-3.5 3-6 7-6s7 2.5 7 6" stroke="#404040"/></svg>
-                  )},
-                  {label:'Positions', path:'/positions', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="3" rx="1" stroke="#404040"/><rect x="3" y="11" width="18" height="3" rx="1" stroke="#404040"/><rect x="3" y="16" width="18" height="3" rx="1" stroke="#404040"/></svg>
-                  )},
-                  {label:'Pending Orders', path:'/pending-orders', active:true, icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#1A63BC"/><circle cx="12" cy="12" r="2" fill="#1A63BC"/></svg>
-                  )},
-                  {label:'Margin Level', path:'/margin-level', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 18L10 12L14 16L20 8" stroke="#404040" strokeWidth="2"/></svg>
-                  )},
-                  {label:'Live Dealing', path:'/live-dealing', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12a9 9 0 0 1 18 0" stroke="#404040"/><path d="M7 12a5 5 0 0 1 10 0" stroke="#404040"/></svg>
-                  )},
-                  {label:'Client Percentage', path:'/client-percentage', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6" stroke="#404040"/><circle cx="8" cy="8" r="2" stroke="#404040"/><circle cx="16" cy="16" r="2" stroke="#404040"/></svg>
-                  )},
-                  {label:'Bills', path:'/bills', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#404040"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#404040" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  )},
-                  {label:'Brokerage Calculator', path:'/brokerage-calculator'},
-                  {label:'Tutorials', path:'/tutorials', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="4.5" width="19" height="15" rx="3" stroke="#404040"/><path d="M10 9.2v5.6l5-2.8-5-2.8z" fill="#404040"/></svg>
-                  )},
-                ].map((item, idx) => (
-                  <button 
-                    key={idx} 
-                    onClick={() => {
-                      navigate(item.path)
-                      setIsSidebarOpen(false)
-                    }}
-                    className={`flex items-center gap-3 px-4 h-11 text-[13px] ${item.active ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                  >
-                    <span className="w-5 h-5 flex items-center justify-center">{item.path === "/tutorials" ? <TutorialIcon className="w-5 h-5 text-[#404040]" /> : item.path === "/brokerage-calculator" ? <BrokerageCalcIcon className="w-5 h-5 text-[#404040]" /> : <img src={`${import.meta.env.BASE_URL||'/'}sidebar-icons/${{'/dashboard':'Dashboard','/client2':'Clients','/positions':'Positions','/pending-orders':'Pending-Orders','/margin-level':'Margin-Level','/live-dealing':'Live-Dealing','/client-percentage':'Client-Percentage','/bills':'Bills','/tutorials':'Tutorials','/settings':'Settings'}[item.path]}.svg`} alt={item.label} style={{filter:'brightness(0)'}} className="w-5 h-5"/>}</span>
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-                <div>
-                  <button type="button" onClick={() => setMobileReportsOpen(value => !value)} className="flex items-center gap-3 px-4 h-11 w-full text-left text-[13px] text-[#404040]">
-                    <span className="w-5 h-5 flex items-center justify-center"><ReportsIcon className="w-5 h-5 text-black" /></span>
-                    <span className="flex-1">Reports</span>
-                    <svg className={`w-4 h-4 transition-transform ${mobileReportsOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  </button>
-                  {mobileReportsOpen && (
-                    <div className="flex flex-col pb-1">
-                      <button type="button" onClick={() => { navigate('/reports/exchange'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/exchange' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/exchange" />Brokerage Data</button>
-                      <button type="button" onClick={() => { navigate('/reports/historical-positions'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/historical-positions' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/historical-positions" />Historical Positions</button>
-                      <button type="button" onClick={() => { navigate('/reports/deals'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/deals' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/deals" />Deals</button>
-                      <button type="button" onClick={() => { navigate('/reports/summary'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/summary' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/summary" />Summary</button>
-                      <button type="button" onClick={() => { navigate('/reports/credit'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/credit' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/credit" />Credit Report</button>
-                      <button type="button" onClick={() => { navigate('/reports/agent-details'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/agent-details' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/agent-details" />Agent Details</button>
-                      <button type="button" onClick={() => { navigate('/reports/deposit-withdrawal'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/deposit-withdrawal' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' :  'text-[#404040]'}`}><ReportSubIcon path="/reports/deposit-withdrawal" />D/W Report</button>
-                      <button type="button" onClick={() => { navigate('/reports/settlement'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/settlement' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' :  'text-[#404040]'}`}><ReportSubIcon path="/reports/settlement" />Settlement Report</button>
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigate('/settings')
-                    setIsSidebarOpen(false)
-                  }}
-                  className={`flex items-center gap-3 px-4 h-11 text-[13px] ${location.pathname === '/settings' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                >
-                  <span className="w-5 h-5 flex items-center justify-center"><img src={`${import.meta.env.BASE_URL||'/'}sidebar-icons/Settings.svg`} alt="Settings" style={{filter:'brightness(0)'}} className="w-5 h-5"/></span>
-                  <span>Settings</span>
-                </button>
-              </nav>
-            </div>
-
-            <div className="p-4 mt-auto border-t border-[#ECECEC]">
-              <button onClick={logout} className="flex items-center gap-3 px-2 h-11 text-[13px] text-[#404040]">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 18.25C11.8011 18.25 11.6103 18.329 11.4697 18.4697C11.329 18.6103 11.25 18.8011 11.25 19C11.25 19.1989 11.329 19.3897 11.4697 19.5303C11.6103 19.671 11.8011 19.75 12 19.75H18C18.4641 19.75 18.9092 19.5656 19.2374 19.2374C19.5656 18.9092 19.75 18.4641 19.75 18V6C19.75 5.53587 19.5656 5.09075 19.2374 4.76256C18.9092 4.43437 18.4641 4.25 18 4.25H12C11.8011 4.25 11.6103 4.32902 11.4697 4.46967C11.329 4.61032 11.25 4.80109 11.25 5C11.25 5.19891 11.329 5.38968 11.4697 5.53033C11.6103 5.67098 11.8011 5.75 12 5.75H18C18.0663 5.75 18.1299 5.77634 18.1768 5.82322C18.2237 5.87011 18.25 5.9337 18.25 6V18C18.25 18.0663 18.2237 18.1299 18.1768 18.1768C18.1299 18.2237 18.0663 18.25 18 18.25H12Z" fill="#FF5F57"/>
-                  <path fillRule="evenodd" clipRule="evenodd" d="M14.5029 14.365C15.1929 14.365 15.7529 13.805 15.7529 13.115V10.875C15.7529 10.185 15.1929 9.62498 14.5029 9.62498H9.8899L9.8699 9.40498L9.8159 8.84898C9.79681 8.65261 9.73064 8.46373 9.62301 8.29838C9.51538 8.13302 9.36946 7.99606 9.19763 7.8991C9.0258 7.80214 8.83312 7.74805 8.63593 7.74142C8.43874 7.73478 8.24286 7.77579 8.0649 7.86098C6.42969 8.64307 4.94977 9.71506 3.6969 11.025L3.5979 11.128C3.37433 11.3612 3.24951 11.6719 3.24951 11.995C3.24951 12.3181 3.37433 12.6287 3.5979 12.862L3.6979 12.965C4.95047 14.2748 6.43005 15.3468 8.0649 16.129C8.24286 16.2142 8.43874 16.2552 8.63593 16.2485C8.83312 16.2419 9.0258 16.1878 9.19763 16.0909C9.36946 15.9939 9.51538 15.8569 9.62301 15.6916C9.73064 15.5262 9.79681 15.3374 9.8159 15.141L9.8699 14.585L9.8899 14.365H14.5029ZM9.1949 12.865C9.00405 12.8651 8.82044 12.938 8.68147 13.0688C8.54249 13.1996 8.45861 13.3785 8.4469 13.569C8.42823 13.859 8.4049 14.1493 8.3769 14.44L8.3609 14.602C7.05583 13.9285 5.86846 13.0481 4.8449 11.995C5.86846 10.9418 7.05583 10.0614 8.3609 9.38798L8.3769 9.54998C8.4049 9.83998 8.42823 10.1303 8.4469 10.421C8.45861 10.6115 8.54249 10.7903 8.68147 10.9211C8.82044 11.0519 9.00405 11.1248 9.1949 11.125H14.2529V12.865H9.1949Z" fill="#FF5F57"/>
-                </svg>
-                <span>Logout</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Shared mobile navigation drawer — one menu for every module (components/Sidebar.jsx) */}
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} onToggle={() => setIsSidebarOpen(value => !value)} mobileOnly />
 
       {/* Main Content */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
-        {/* Action buttons row */}
-        <div className="pt-5 pb-4 px-4">
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setIsCustomizeOpen(true)} 
-              className={`h-8 px-3 rounded-[12px] border shadow-sm flex items-center justify-center gap-2 transition-all relative ${
-                (filters.hasFloating || filters.hasCredit || filters.noDeposit || getActiveGroupFilter('pendingorders'))
-                  ? 'bg-blue-50 border-blue-200' 
-                  : 'bg-white border-[#E5E7EB] hover:bg-gray-50'
-              }`}
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M4.5 6.5H9.5M2.5 3.5H11.5M5.5 9.5H8.5" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              <span className="text-[#4B4B4B] text-[10px] font-medium font-outfit">Filter</span>
-              {(() => {
-                const filterCount = [
-                  filters.hasFloating,
-                  filters.hasCredit,
-                  filters.noDeposit,
-                  getActiveGroupFilter('pendingorders')
-                ].filter(Boolean).length;
-                return filterCount > 0 ? (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                    {filterCount}
-                  </span>
-                ) : null;
-              })()}
-            </button>
-            <button 
-              onClick={() => window.location.reload()}
-              disabled={loading.orders}
-              className="w-8 h-8 rounded-lg border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="#4B4B4B" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
         {/* Face Cards Carousel */}
-        <div className="pb-2 pl-5">
+        <div className="pt-3 pb-1 pl-4">
           <div 
             ref={carouselRef}
-            className="flex gap-[8px] overflow-x-auto scrollbar-hide snap-x snap-mandatory pr-4"
+            className="flex gap-[10px] overflow-x-auto scrollbar-hide snap-x snap-mandatory pr-4 pb-2"
           >
             {cards.map((card, i) => (
               <div 
@@ -833,14 +678,14 @@ value = order.type || '-'
                 }}
                 style={{
                   boxSizing: 'border-box',
-                  minWidth: '125px',
-                  width: '125px',
-                  height: '60px',
-                  background: '#FFFFFF',
-                  border: '1px solid #F2F2F7',
-                  boxShadow: '0px 0px 12px rgba(75, 75, 75, 0.05)',
-                  borderRadius: '12px',
-                  padding: '8px',
+                  minWidth: '132px',
+                  width: '132px',
+                  height: '72px',
+                  background: 'transparent',
+                  border: '1px solid #D5DEEA',
+                  boxShadow: 'none',
+                  borderRadius: '14px',
+                  padding: '10px',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
@@ -853,18 +698,21 @@ value = order.type || '-'
                   touchAction: 'pan-x'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', pointerEvents: 'none' }}>
-                  <span style={{ color: '#4B4B4B', fontSize: '9px', fontWeight: 600, lineHeight: '12px', paddingRight: '4px' }}>{card.label}</span>
-                  <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', pointerEvents: 'none' }}>
+                  <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: card.isProfit ? (card.profitValue > 0 ? '#DCFCE7' : card.profitValue < 0 ? '#FEE2E2' : '#DBEAFE') : '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '5px' }}>
                     <img src={getCardIcon(card.label)} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(0) saturate(100%) invert(27%) sepia(97%) saturate(1500%) hue-rotate(213deg) brightness(100%)' }} onError={(e) => { e.target.style.display = 'none' }} />
                   </div>
+                  <span style={{ color: '#334155', fontSize: '11px', fontWeight: 500, lineHeight: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.label}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minHeight: '16px', pointerEvents: 'none' }}>
                   <span style={{
-                    fontSize: '13px',
+                    fontSize: '14px',
                     fontWeight: 700,
-                    lineHeight: '14px',
+                    lineHeight: '18px',
                     letterSpacing: '-0.01em',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
                     color: card.isProfit ? (card.profitValue >= 0 ? '#16A34A' : '#DC2626') : '#000000'
                   }}>
                     {card.value === '' || card.value === undefined ? '0.00' : card.value}
@@ -875,24 +723,66 @@ value = order.type || '-'
           </div>
         </div>
 
+        {/* Action buttons row */}
+        <div className="pt-2 pb-3 px-4">
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setIsCustomizeOpen(true)} 
+              className={`h-9 px-3 rounded-xl border flex items-center justify-center gap-1.5 transition-all relative ${
+                (filters.hasFloating || filters.hasCredit || filters.noDeposit || getActiveGroupFilter('pendingorders'))
+                  ? 'bg-blue-50 border-blue-200' 
+                  : 'bg-transparent border-[#D5DEEA] hover:bg-white/60'
+              }`}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M4.5 6.5H9.5M2.5 3.5H11.5M5.5 9.5H8.5" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <span className="text-[#1F2937] text-[11px] font-medium font-outfit">Filter</span>
+              {(() => {
+                const filterCount = [
+                  filters.hasFloating,
+                  filters.hasCredit,
+                  filters.noDeposit,
+                  getActiveGroupFilter('pendingorders')
+                ].filter(Boolean).length;
+                return filterCount > 0 ? (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                    {filterCount}
+                  </span>
+                ) : null;
+              })()}
+            </button>
+            <button 
+              onClick={() => window.location.reload()}
+              disabled={loading.orders}
+              className="w-9 h-9 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="#4B4B4B" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
         {/* Search and navigation */}
-        <div className="mx-1 sm:mx-4 mb-1 px-3 py-3 sm:p-4">
-          <div className="flex items-center gap-1 sm:gap-2">
-            <div className="flex-1 min-w-0 h-7 sm:h-10 bg-[#F9FAFB] border border-[#E5E7EB] rounded-md px-2 sm:px-3 flex items-center gap-1.5">
-              <svg width="12" height="12" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]">
+        <div className="mx-4 mb-3">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="flex-1 min-w-0 h-10 bg-transparent border border-[#D5DEEA] rounded-xl px-3 flex items-center gap-2">
+              <svg width="15" height="15" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]">
                 <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
                 <path d="M13 13L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              <input 
-                placeholder="Search"
+              <input
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')} 
+                placeholder="Search by login, order, symbol..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="flex-1 min-w-0 text-[11px] sm:text-sm text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit focus:ring-0"
+                className="flex-1 min-w-0 text-[13px] sm:text-sm text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit focus:ring-0"
               />
             </div>
             <button 
               onClick={() => setIsColumnSelectorOpen(true)}
-              className="h-7 w-7 sm:h-10 sm:w-10 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors"
+              className="h-10 w-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors"
               title="Show/Hide Columns">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                 <rect x="2" y="3" width="4" height="10" rx="1" stroke="#4B5563" strokeWidth="1.2"/>
@@ -902,13 +792,13 @@ value = order.type || '-'
             <button 
               onClick={() => handlePageChange(currentPage - 1, totalPages)}
               disabled={currentPage === 1}
-              className="h-7 w-7 sm:h-10 sm:w-10 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-10 w-9 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
                 <path d="M12 14L8 10L12 6" stroke="#4B5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-            <div className="px-1 text-[11px] font-medium text-[#374151] flex items-center gap-1">
+            <div className="text-[13px] font-medium text-[#475569] flex items-center gap-1">
               <input
                 type="number"
                 min={1}
@@ -920,7 +810,7 @@ value = order.type || '-'
                     handlePageChange(n, totalPages)
                   }
                 }}
-                className="w-10 h-7 border border-[#E5E7EB] rounded-lg text-center text-[11px] font-semibold text-[#1F2937]"
+                className="w-10 h-10 bg-[#2563EB] text-white font-semibold border border-[#2563EB] rounded-xl text-center text-[13px] shadow-[0_4px_10px_rgba(37,99,235,0.3)] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 aria-label="Current page"
               />
               <span className="text-[#9CA3AF]">/</span>
@@ -929,7 +819,7 @@ value = order.type || '-'
             <button 
               onClick={() => handlePageChange(currentPage + 1, totalPages)}
               disabled={currentPage >= totalPages}
-              className="h-7 w-7 sm:h-10 sm:w-10 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-10 w-9 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
                 <path d="M8 6L12 10L8 14" stroke="#4B5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -940,7 +830,7 @@ value = order.type || '-'
 
         {/* Table */}
         <div className="">
-          <div className="bg-white shadow-[0_0_12px_rgba(75,75,75,0.05)] border border-[#F2F2F7] overflow-hidden">
+          <div className="bg-transparent border border-blue-100 max-md:border-b-0 overflow-hidden">
             <div className="mobile-table-scroll w-full overflow-x-auto overflow-y-auto scrollbar-hide" style={{
               WebkitOverflowScrolling: 'touch',
               scrollbarWidth: 'none',
@@ -997,7 +887,7 @@ value = order.type || '-'
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                       <div data-mobile-data-row="body" 
                         key={`skeleton-row-${i}`}
-                        className="grid text-[10px] text-[#4B4B4B] font-outfit bg-white border-b border-[#E1E1E1]"
+                        className="grid text-[10px] text-[#4B4B4B] font-outfit bg-transparent border-b border-[#E1E1E1]"
                         style={{
                           gap: '0px', 
                           gridGap: '0px', 
@@ -1027,7 +917,7 @@ value = order.type || '-'
                   displayOrders.map((order, idx) => (
                   <div data-mobile-data-row="body" 
                     key={idx} 
-                    className="grid text-[10px] text-[#4B4B4B] font-outfit bg-white border-b border-[#E1E1E1] hover:bg-[#F8FAFC] transition-colors"
+                    className="grid text-[10px] text-[#4B4B4B] font-outfit bg-transparent border-b border-[#E1E1E1] hover:bg-white/50 transition-colors"
                     style={{
                       gap: '0px', 
                       gridGap: '0px', 
@@ -1059,24 +949,39 @@ value = order.type || '-'
         </div>
       </div>
 
+      {/* Bottom Navigation */}
+      <MobileBottomNav onMore={() => setIsSidebarOpen(true)} />
+
       {/* Column Selector Modal */}
       {isColumnSelectorOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setIsColumnSelectorOpen(false)}>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end" onClick={() => setIsColumnSelectorOpen(false)}>
+          {/* Scoped restyle of the shared ColumnChooserList to match the mobile theme */}
+          <style>{`
+            .c2-col-chooser > div > div { border-color: #D5DEEA !important; }
+            .c2-col-chooser input[type="text"] { background: transparent !important; border-color: #D5DEEA !important; border-radius: 12px !important; height: 40px; font-size: 13px !important; }
+            .c2-col-chooser input[type="checkbox"] { width: 16px !important; height: 16px !important; accent-color: #2563EB; border-radius: 4px; }
+            .c2-col-chooser .overscroll-contain > [data-col-key] { padding-top: 10px; padding-bottom: 10px; margin-left: 12px; margin-right: 12px; border-radius: 0; border-bottom: 1px solid rgba(213, 222, 234, 0.6); }
+            .c2-col-chooser .overscroll-contain > [data-col-key] label span { font-size: 13px !important; color: #1F2937 !important; }
+          `}</style>
           <div
-            className="bg-white w-full rounded-t-[24px] flex flex-col overflow-hidden"
+            className="bg-white w-full rounded-t-[28px] flex flex-col overflow-hidden shadow-[0_-8px_30px_rgba(15,23,42,0.12)]"
             style={{ maxHeight: '85dvh' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between flex-shrink-0">
-              <h3 className="text-base font-semibold text-[#000000]">Show/Hide & Reorder Columns</h3>
-              <button onClick={() => setIsColumnSelectorOpen(false)} aria-label="Close">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="#404040" strokeWidth="2"/>
+            <div className="pt-2.5 flex justify-center flex-shrink-0"><span className="w-10 h-1 rounded-full bg-[#CBD5E1]" /></div>
+            <div className="px-5 pt-3 pb-3 border-b border-[#D5DEEA] flex items-center justify-between gap-3 flex-shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-[18px] leading-6 font-extrabold tracking-tight text-[#0F172A] truncate">Columns</h3>
+                <p className="text-[12px] text-[#64748B] truncate">Show, hide, pin & reorder columns</p>
+              </div>
+              <button onClick={() => setIsColumnSelectorOpen(false)} aria-label="Close" className="w-10 h-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="#0F172A" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 flex flex-col">
+            <div className="c2-col-chooser flex-1 min-h-0 flex flex-col">
               <ColumnChooserList
                 columns={allColumns.map(({ key, label }) => ({ key, label }))}
                 visibleColumns={visibleColumns}

@@ -1,13 +1,11 @@
-import { drawerTapGuard } from '../utils/drawerTapGuard'
 import BrokerCreditSummary from '../components/BrokerCreditSummary'
+import MobileBottomNav from '../components/MobileBottomNav'
 import { useState, useEffect, useMemo, useRef, useCallback, Fragment, cloneElement } from 'react'
-import { ReportsIcon, ReportSubIcon } from '../components/ReportIcons'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { ReportsIcon, ReportSubIcon, TutorialIcon, BrokerageCalcIcon } from '../components/ReportIcons'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import JSZip from 'jszip'
 import { brokerAPI } from '../services/api'
-import { useAuth } from '../contexts/authContextStore'
 import Sidebar from '../components/Sidebar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import PageSizeSelect from '../components/PageSizeSelect'
@@ -327,9 +325,6 @@ const ALL_BILL_COLUMNS = [
 ]
 
 const BillsPage = () => {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const { logout } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
       // On mobile, always start closed to match other mobile modules and avoid
@@ -339,44 +334,14 @@ const BillsPage = () => {
       return v !== null ? JSON.parse(v) : true
     } catch { return true }
   })
-  const [mobileReportsOpen, setMobileReportsOpen] = useState(() => location.pathname.startsWith('/reports'))
   const closeMobileSidebar = useCallback(() => {
     setSidebarOpen(false)
     try { localStorage.setItem('sidebarOpen', JSON.stringify(false)) } catch { /* Retain the fallback when this operation is unavailable. */ }
   }, [])
-  const handleMobileNavSelect = useCallback((path) => {
-    closeMobileSidebar()
-    if (location.pathname !== path) {
-      navigate(path)
-    }
-  }, [closeMobileSidebar, location.pathname, navigate])
-  const [numericMode, setNumericMode] = useState(() => {
-    try {
-      const s = localStorage.getItem('globalDisplayMode')
-      return s === 'full' ? 'full' : 'compact'
-    } catch {
-      return 'compact'
-    }
-  })
-  useEffect(() => {
-    if (location.pathname.startsWith('/reports')) setMobileReportsOpen(true)
-  }, [location.pathname])
-
-  useEffect(() => {
-    const onChange = (e) => {
-      const v = (e && e.detail) || localStorage.getItem('globalDisplayMode')
-      if (v === 'full' || v === 'compact') setNumericMode(v)
-    }
-    window.addEventListener('globalDisplayModeChanged', onChange)
-    window.addEventListener('storage', onChange)
-    return () => {
-      window.removeEventListener('globalDisplayModeChanged', onChange)
-      window.removeEventListener('storage', onChange)
-    }
-  }, [])
 
   const [weeks, setWeeks] = useState([])
   const [selectedWeekId, setSelectedWeekId] = useState(null)
+  const [isWeekMenuOpen, setIsWeekMenuOpen] = useState(false)
   const [weeksLoading, setWeeksLoading] = useState(true)
 
   const [rows, setRows] = useState([])
@@ -498,7 +463,7 @@ const BillsPage = () => {
   const toggleColumn = (key) => setVisibleColumns(prev => ({ ...prev, [key]: !prev[key] }))
 
   // Mobile pinned offsets — 32px selection column sits at the left edge, pinned columns stack after it
-  const MOBILE_COL_WIDTHS = { login: 80, name: 90, actions: 80 }
+  const MOBILE_COL_WIDTHS = { login: 80, name: 90, actions: 92 }
   const mobileColWidth = (key) => MOBILE_COL_WIDTHS[key] || 110
   const mobilePinnedOffsets = (() => {
     const map = {}
@@ -658,7 +623,7 @@ const BillsPage = () => {
   }, [selectedWeekId, page, limit, search, sortBy, sortOrder, groupMt5Accounts, hideZeroNet, weeksLoading])
 
   const selectedWeek = useMemo(
-    () => weeks.find(w => w.id === selectedWeekId) || null,
+    () => weeks.find(w => Number(w.id) === Number(selectedWeekId)) || null,
     [weeks, selectedWeekId]
   )
 
@@ -877,7 +842,7 @@ const BillsPage = () => {
   )
 
   return (
-    <div className="report-viewport flex bg-gray-50">
+    <div className="report-viewport flex bg-gray-50 max-sm:bg-white">
       {(bulkDownloading || exportingAll) && (
         <LoadingSpinner
           message={exportingAll ? 'Exporting all bills…' : 'Downloading selected bills…'}
@@ -895,19 +860,25 @@ const BillsPage = () => {
       <main className={`min-w-0 min-h-0 flex-1 px-3 pt-0 pb-3 sm:p-4 lg:p-6 transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'} flex flex-col overflow-hidden`}>
         <div className="max-w-full min-w-0 min-h-0 mx-auto w-full flex flex-col flex-1 overflow-hidden">
           {/* Header Card */}
-          <div className="-mx-3 sm:mx-0 bg-white rounded-none sm:rounded-2xl shadow-sm px-0 sm:px-6 py-0 sm:py-3 mb-2 sm:mb-4">
+          <div className="-mx-3 sm:mx-0 bg-white rounded-none sm:rounded-2xl shadow-sm px-0 sm:px-6 py-0 sm:py-3 mb-2 sm:mb-4 max-sm:bg-transparent max-sm:shadow-none max-sm:mb-0">
             {/* Mobile-only header (centered title, large rounded hamburger) — matches other modules */}
-            <div className="flex-wrap sm:hidden flex items-center px-4 py-4 bg-white border-b border-[#ECECEC] relative">
+            <div className="flex-wrap sm:hidden flex items-center gap-3 px-4 pt-4 pb-2 bg-transparent relative">
               <button
                 onClick={() => setSidebarOpen(v => { const n = !v; try { localStorage.setItem('sidebarOpen', JSON.stringify(n)) } catch { /* Retain the fallback when this operation is unavailable. */ } ; return n })}
-                className="w-12 h-12 rounded-2xl bg-[#F8F8F8] flex items-center justify-center"
+                className="w-12 h-12 flex-shrink-0 rounded-2xl bg-transparent border border-[#D5DEEA] flex items-center justify-center"
                 aria-label="Open menu"
               >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                   <path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
-              <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="text-xl font-semibold text-black transform min-w-0 max-sm:text-sm">Bills</h1><BrokerCreditSummary variant="header" /></div>
+              <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="text-[22px] leading-7 font-extrabold tracking-tight text-[#0F172A] truncate">Bills</h1>
+                  <p className="text-[12px] text-[#64748B] truncate">Weekly settlement bills</p>
+                </div>
+                <BrokerCreditSummary variant="header" />
+              </div>
             
 
 
@@ -1048,60 +1019,118 @@ const BillsPage = () => {
 <BrokerCreditSummary variant="desktop-header" />
 </div>
 
-          {/* Mobile-only: all controls aligned in one compact row */}
+          {/* Summary Cards — mobile: horizontal carousel; desktop: 3-col grid */}
+          <div className="sm:hidden mb-1 pt-2">
+            <div className="flex gap-[10px] overflow-x-auto overscroll-x-none scrollbar-hide snap-x snap-mandatory pb-2 px-1">
+              {[
+                { label: 'Total Brokerage', value: totals.TotalBrokerage, iconPath: 'M12 8c-3.866 0-7 1.79-7 4s3.134 4 7 4 7-1.79 7-4-3.134-4-7-4zm0 0V5m0 11v3m-5-6h10' },
+                { label: 'Total Gross', value: totals.TotalGrossAmount, iconPath: 'M9 7h6m-6 4h6m-6 4h4M5 5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5z' },
+                { label: 'Total Net', value: totals.TotalNetAmount, iconPath: 'M3 10h18M3 6h18M3 14h18M3 18h18' },
+              ].map((c) => (
+                <div
+                  key={c.label}
+                  className="bg-transparent border border-[#D5DEEA] rounded-[14px] p-2.5 flex-shrink-0 snap-start flex flex-col justify-between"
+                  style={{ minWidth: '140px', width: '140px', height: '72px' }}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className={`w-[26px] h-[26px] rounded-full flex items-center justify-center flex-shrink-0 ${Number(c.value) < 0 ? 'bg-[#FEE2E2]' : 'bg-[#DBEAFE]'}`}>
+                      <svg className="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={c.iconPath} />
+                      </svg>
+                    </div>
+                    <span className="text-[11px] font-medium text-[#334155] leading-tight truncate">{c.label}</span>
+                  </div>
+                  <div className={`text-[14px] font-bold leading-[18px] truncate ${Number(c.value) < 0 ? 'text-red-600' : 'text-[#0F172A]'}`}>
+                    {fmtMoney(c.value)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Mobile-only: all controls in one row — week picker takes the free space, the rest are compact */}
           <div className="sm:hidden flex flex-nowrap items-center gap-1 mb-3 px-1">
             {weeksLoading ? (
-              <div className="h-8 flex-1 rounded-md bg-gray-200 animate-pulse min-w-0" aria-label="Loading weeks" />
+              <div className="h-9 flex-1 min-w-0 rounded-xl bg-gray-200 animate-pulse" aria-label="Loading weeks" />
             ) : (
-              <select
-                value={selectedWeekId ?? ''}
-                onChange={(e) => { setSelectedWeekId(Number(e.target.value)); setPage(1); setSelected(new Set()) }}
-                disabled={weeks.length === 0}
-                aria-label="Select week"
-                className="h-8 flex-1 w-0 min-w-0 px-1 rounded-md border border-[#E5E7EB] bg-white text-[10px] text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 truncate"
-              >
-                {weeks.length === 0 && <option>No weeks</option>}
-                {weeks.map(w => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </select>
+              <div className="relative flex-1 min-w-0">
+                <button
+                  type="button"
+                  aria-label="Select week"
+                  aria-expanded={isWeekMenuOpen}
+                  disabled={weeks.length === 0}
+                  onClick={() => setIsWeekMenuOpen(v => !v)}
+                  className="h-9 w-full px-2 rounded-xl border border-[#D5DEEA] bg-transparent flex items-center gap-1.5 text-left disabled:opacity-60"
+                >
+                  <svg className="w-3.5 h-3.5 flex-shrink-0 text-[#2563EB]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></svg>
+                  <span className="flex-1 min-w-0 truncate text-[12px] font-semibold text-[#0F172A]">
+                    {(() => {
+                      // Short label for the button ("WEEK 24 OCTOBER" -> "24 Oct"); the list shows full names
+                      const name = weeks.find(w => Number(w.id) === Number(selectedWeekId))?.name
+                      if (!name) return weeks.length === 0 ? 'No weeks' : 'Select week'
+                      return name.replace(/^week\s*/i, '').toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()).replace(/\b([A-Z][a-z]{2})[a-z]+\b/, '$1')
+                    })()}
+                  </span>
+                  <svg className={`w-3 h-3 flex-shrink-0 transition-transform ${isWeekMenuOpen ? 'rotate-180' : ''}`} viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+                {isWeekMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsWeekMenuOpen(false)} />
+                    <div className="absolute left-0 top-full mt-1.5 z-50 w-[220px] max-h-[50vh] overflow-y-auto rounded-2xl border border-[#D5DEEA] bg-white backdrop-blur shadow-[0_10px_30px_rgba(15,23,42,0.14)] p-1.5">
+                      <p className="px-2.5 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">Settlement Week</p>
+                      {weeks.map(w => (
+                        <button
+                          key={w.id}
+                          type="button"
+                          onClick={() => { setSelectedWeekId(Number(w.id)); setPage(1); setSelected(new Set()); setIsWeekMenuOpen(false) }}
+                          className={`w-full h-10 px-3 rounded-xl flex items-center justify-between text-left text-[13px] ${Number(w.id) === Number(selectedWeekId) ? 'bg-[#2563EB] text-white font-semibold' : 'text-[#1F2937] active:bg-white/70'}`}
+                        >
+                          <span className="truncate">{w.name}</span>
+                          {Number(w.id) === Number(selectedWeekId) && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
             <button
               type="button"
               onClick={() => setIsCustomizeOpen(true)}
-              className={`relative h-8 px-1 rounded-md border shadow-sm flex items-center justify-center gap-1 flex-shrink-0 ${
+              aria-label="Filter"
+              title="Filter"
+              className={`relative h-9 px-2 rounded-xl border flex items-center justify-center gap-1 flex-shrink-0 ${
                 getActiveGroupFilter('bills')
                   ? 'bg-blue-50 border-blue-200'
-                  : 'bg-white border-[#E5E7EB] hover:bg-gray-50'
+                  : 'bg-transparent border-[#D5DEEA] hover:bg-white/60'
               }`}
             >
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                <path d="M4.5 6.5H9.5M2.5 3.5H11.5M5.5 9.5H8.5" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M4.5 6.5H9.5M2.5 3.5H11.5M5.5 9.5H8.5" stroke="#1F2937" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              <span className="text-[9px] font-medium text-[#4B4B4B]">Filter</span>
+              <span className="text-[11px] font-medium text-[#1F2937]">Filter</span>
               {getActiveGroupFilter('bills') && (
-                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-blue-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center">1</span>
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] bg-[#2563EB] text-white text-[9px] font-bold rounded-full flex items-center justify-center">1</span>
               )}
             </button>
             <div ref={selectedMenuRefMobile} className="relative flex-shrink-0">
               <button
                 onClick={() => setSelectedMenuOpen(o => !o)}
                 disabled={selected.size === 0 || bulkDownloading || exportingAll}
-                className="h-8 px-1 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Download selected bills"
+                title="Download selected"
+                className="relative h-9 px-2 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <svg className="hidden min-[400px]:block w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 12V4m0 8l-3-3m3 3l3-3" />
-                </svg>
-                <span className="text-[9px] font-medium text-gray-700">Selected</span>
-                {selected.size > 0 && <span className="text-[9px] font-semibold text-blue-600">({selected.size})</span>}
-                <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                <span className="text-[11px] font-medium text-[#1F2937]">Selected</span>
+                {selected.size > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-[#2563EB] text-white text-[9px] font-bold rounded-full flex items-center justify-center">{selected.size}</span>
+                )}
               </button>
               {selectedMenuOpen && (
-                <div className="absolute left-0 mt-1 w-52 rounded-md bg-white shadow-lg border border-gray-200 z-30 py-1 text-xs">
-                  <button type="button" onClick={() => { setSelectedMenuOpen(false); downloadSelected('individual') }} className="w-full text-left px-3 py-2 hover:bg-gray-50 text-gray-700">Download individual files</button>
-                  <button type="button" onClick={() => { setSelectedMenuOpen(false); downloadSelected('zip') }} className="w-full text-left px-3 py-2 hover:bg-gray-50 text-gray-700">Download as ZIP</button>
+                <div className="absolute right-0 mt-1.5 w-52 rounded-2xl bg-white shadow-[0_10px_30px_rgba(15,23,42,0.14)] border border-[#D5DEEA] z-30 p-1.5 text-[13px]">
+                  <p className="px-2.5 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">Selected ({selected.size})</p>
+                  <button type="button" onClick={() => { setSelectedMenuOpen(false); downloadSelected('individual') }} className="w-full text-left px-2.5 h-9 rounded-xl hover:bg-white/70 text-[#1F2937]">Download individual files</button>
+                  <button type="button" onClick={() => { setSelectedMenuOpen(false); downloadSelected('zip') }} className="w-full text-left px-2.5 h-9 rounded-xl hover:bg-white/70 text-[#1F2937]">Download as ZIP</button>
                 </div>
               )}
             </div>
@@ -1109,20 +1138,20 @@ const BillsPage = () => {
               <button
                 onClick={() => setAllMenuOpen(o => !o)}
                 disabled={exportingAll || bulkDownloading || !selectedWeekId}
-                className="h-8 px-1 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Download all bills"
+                title="Download all"
+                className="h-9 px-2 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <svg className="hidden min-[400px]:block w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3 text-[#1F2937]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-3-3m3 3l3-3M4 20h16" />
                 </svg>
-                <span className="text-[9px] font-medium text-gray-700">All</span>
-                <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                <span className="text-[11px] font-medium text-[#1F2937]">All</span>
               </button>
               {allMenuOpen && (
-                <div className="absolute right-0 mt-1 w-52 rounded-md bg-white shadow-lg border border-gray-200 z-30 py-1 text-xs">
-                  <button type="button" onClick={() => { setAllMenuOpen(false); exportAll('individual') }} className="w-full text-left px-3 py-2 hover:bg-gray-50 text-gray-700">Download individual files</button>
-                  <button type="button" onClick={() => { setAllMenuOpen(false); exportAll('zip') }} className="w-full text-left px-3 py-2 hover:bg-gray-50 text-gray-700">Download as ZIP</button>
+                <div className="absolute right-0 mt-1.5 w-52 rounded-2xl bg-white shadow-[0_10px_30px_rgba(15,23,42,0.14)] border border-[#D5DEEA] z-30 p-1.5 text-[13px]">
+                  <p className="px-2.5 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">All bills</p>
+                  <button type="button" onClick={() => { setAllMenuOpen(false); exportAll('individual') }} className="w-full text-left px-2.5 h-9 rounded-xl hover:bg-white/70 text-[#1F2937]">Download individual files</button>
+                  <button type="button" onClick={() => { setAllMenuOpen(false); exportAll('zip') }} className="w-full text-left px-2.5 h-9 rounded-xl hover:bg-white/70 text-[#1F2937]">Download as ZIP</button>
                 </div>
               )}
             </div>
@@ -1132,10 +1161,10 @@ const BillsPage = () => {
               aria-checked={hideZeroNet}
               aria-label="Hide zero net values"
               onClick={() => setZeroValueVisibility(!hideZeroNet)}
-              className="flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[#E5E7EB] bg-white px-1 text-[9px] font-medium text-gray-700 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              className="flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-[#D5DEEA] bg-transparent px-2 text-[11px] font-medium text-[#1F2937] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
             >
-              <span className="whitespace-nowrap">Hide Zero</span>
-              <span aria-hidden="true" className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${hideZeroNet ? 'bg-blue-600' : 'bg-gray-300'}`}>
+              <span className="whitespace-nowrap">Hide 0</span>
+              <span aria-hidden="true" className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${hideZeroNet ? 'bg-[#2563EB]' : 'bg-gray-300'}`}>
                 <span className={`h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${hideZeroNet ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
               </span>
             </button>
@@ -1146,35 +1175,6 @@ const BillsPage = () => {
               <p className="text-red-700">{error}</p>
             </div>
           )}
-
-          {/* Summary Cards — mobile: horizontal carousel; desktop: 3-col grid */}
-          <div className="sm:hidden mb-3">
-            <div className="flex gap-2 overflow-x-auto overscroll-x-none scrollbar-hide snap-x snap-mandatory pb-1">
-              {[
-                { label: 'Total Brokerage', value: totals.TotalBrokerage, iconPath: 'M12 8c-3.866 0-7 1.79-7 4s3.134 4 7 4 7-1.79 7-4-3.134-4-7-4zm0 0V5m0 11v3m-5-6h10' },
-                { label: 'Total Gross', value: totals.TotalGrossAmount, iconPath: 'M9 7h6m-6 4h6m-6 4h4M5 5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5z' },
-                { label: 'Total Net', value: totals.TotalNetAmount, iconPath: 'M3 10h18M3 6h18M3 14h18M3 18h18' },
-              ].map((c) => (
-                <div
-                  key={c.label}
-                  className="bg-white border border-[#F2F2F7] rounded-xl shadow-sm p-2 flex-shrink-0 snap-start flex flex-col justify-between"
-                  style={{ minWidth: '140px', width: '140px', height: '64px' }}
-                >
-                  <div className="flex items-start justify-between gap-1">
-                    <span className="text-[9px] font-semibold text-[#4B4B4B] uppercase tracking-wide leading-tight">{c.label}</span>
-                    <div className="w-6 h-6 rounded-full bg-[#DBEAFE] flex items-center justify-center flex-shrink-0">
-                      <svg className="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={c.iconPath} />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className={`text-[13px] font-bold leading-none truncate ${Number(c.value) < 0 ? 'text-red-600' : 'text-[#000000]'}`}>
-                    {fmtMoney(c.value)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
           <div className="hidden sm:grid grid-cols-3 gap-3 mb-4">
             {[
@@ -1203,10 +1203,10 @@ const BillsPage = () => {
             <div className="px-3 sm:px-4 py-2 sm:py-3">
 
               {/* ── Mobile search row ── */}
-              <div className="sm:hidden flex items-center gap-1">
+              <div className="sm:hidden flex items-center gap-1.5">
                 {/* Search input with left magnifier */}
-                <div className="flex-1 min-w-0 h-7 bg-[#F9FAFB] border border-[#E5E7EB] rounded-md px-2 flex items-center gap-1.5">
-                  <svg width="12" height="12" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]">
+                <div className="flex-1 min-w-0 h-10 bg-transparent border border-[#D5DEEA] rounded-xl px-3 flex items-center gap-2">
+                  <svg width="15" height="15" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]">
                     <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
                     <path d="M13 13L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
@@ -1215,8 +1215,8 @@ const BillsPage = () => {
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { setSearch(searchInput.trim()); setPage(1) } }}
-                    placeholder="Search"
-                    className="flex-1 min-w-0 text-[10px] text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent focus:ring-0"
+                    placeholder="Search by login, name..."
+                    className="flex-1 min-w-0 text-[13px] text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent focus:ring-0"
                   />
                 </div>
 
@@ -1225,7 +1225,7 @@ const BillsPage = () => {
                   <button
                     type="button"
                     onClick={() => setShowColumnChooser(true)}
-                    className="h-7 w-7 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors"
+                    className="h-10 w-10 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors"
                     title="Show/Hide Columns"
                   >
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
@@ -1240,7 +1240,7 @@ const BillsPage = () => {
                   type="button"
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page <= 1 || loading}
-                  className="flex-shrink-0 h-7 w-7 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex-shrink-0 h-10 w-9 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   title="Previous"
                 >
                   <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
@@ -1249,7 +1249,7 @@ const BillsPage = () => {
                 </button>
 
                 {/* Page indicator */}
-                <div className="flex-shrink-0 px-1 text-[11px] font-medium text-[#374151] flex items-center gap-1">
+                <div className="flex-shrink-0 text-[13px] font-medium text-[#475569] flex items-center gap-1">
                   <input
                     type="number"
                     min={1}
@@ -1260,7 +1260,7 @@ const BillsPage = () => {
                       const tp = pagination.total_pages || 1
                       if (!isNaN(n)) setPage(Math.min(Math.max(1, n), tp))
                     }}
-                    className="w-10 h-7 border border-[#E5E7EB] rounded-lg text-center text-[11px] font-semibold text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-10 h-10 bg-[#2563EB] text-white font-semibold border border-[#2563EB] rounded-xl text-center text-[13px] shadow-[0_4px_10px_rgba(37,99,235,0.3)] focus:outline-none focus:ring-2 focus:ring-blue-300 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     aria-label="Current page"
                   />
                   <span className="text-[#9CA3AF]">/</span>
@@ -1272,7 +1272,7 @@ const BillsPage = () => {
                   type="button"
                   onClick={() => setPage(p => (pagination.total_pages ? Math.min(pagination.total_pages, p + 1) : p + 1))}
                   disabled={loading || (pagination.total_pages && page >= pagination.total_pages)}
-                  className="flex-shrink-0 h-7 w-7 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex-shrink-0 h-10 w-9 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   title="Next"
                 >
                   <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
@@ -1426,7 +1426,7 @@ const BillsPage = () => {
           </div>
 
           {/* Table (own card, edge-to-edge content) */}
-          <div className="bg-white rounded-none shadow-sm min-w-0 min-h-0 flex-1 flex flex-col overflow-hidden">
+          <div className="bg-white rounded-none shadow-sm min-w-0 min-h-0 flex-1 flex flex-col overflow-hidden max-sm:bg-transparent max-sm:shadow-none max-sm:border max-sm:border-blue-100 max-sm:border-b-0">
 
             {/* ═══ MOBILE Table (CSS Grid — matches Client Percentage pattern) ═══ */}
             <div className="sm:hidden flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden">
@@ -1435,7 +1435,7 @@ const BillsPage = () => {
                   {/* Grid Header */}
                   <div data-mobile-data-row="header"
                     className="grid bg-blue-500 text-white text-[10px] font-semibold font-outfit sticky top-0 z-20 shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
-                    style={{ gridTemplateColumns: '32px ' + orderedColumns.filter(c => visibleColumns[c.key]).map(c => c.key === 'login' ? '80px' : c.key === 'name' ? '90px' : c.key === 'actions' ? '80px' : '110px').join(' ') }}
+                    style={{ gridTemplateColumns: '32px ' + orderedColumns.filter(c => visibleColumns[c.key]).map(c => c.key === 'login' ? '80px' : c.key === 'name' ? '90px' : c.key === 'actions' ? '92px' : '110px').join(' ') }}
                   >
                     <div className="h-[32px] flex items-center justify-center sticky left-0 z-30" style={{ backgroundColor: '#3B82F6' }}>
                       <input
@@ -1473,8 +1473,8 @@ const BillsPage = () => {
                       {[...Array(8)].map((_, idx) => (
                         <div data-mobile-data-row="body"
                           key={idx}
-                          className="grid text-[10px] bg-white border-b border-[#E1E1E1]"
-                          style={{ gridTemplateColumns: '32px ' + orderedColumns.filter(c => visibleColumns[c.key]).map(c => c.key === 'login' ? '80px' : c.key === 'name' ? '90px' : c.key === 'actions' ? '80px' : '110px').join(' ') }}
+                          className="grid text-[10px] bg-transparent border-b border-[#E1E1E1]"
+                          style={{ gridTemplateColumns: '32px ' + orderedColumns.filter(c => visibleColumns[c.key]).map(c => c.key === 'login' ? '80px' : c.key === 'name' ? '90px' : c.key === 'actions' ? '92px' : '110px').join(' ') }}
                         >
                           <div className="h-[38px] flex items-center justify-center sticky left-0 bg-white z-10" />
                           {orderedColumns.filter(c => visibleColumns[c.key]).map(col => (
@@ -1499,10 +1499,10 @@ const BillsPage = () => {
                       return (
                         <div data-mobile-data-row="header"
                           key={r.Login}
-                          className={`grid text-[10px] text-[#4B4B4B] font-outfit border-b border-[#E1E1E1] transition-colors ${isChecked ? 'bg-blue-50' : 'bg-white hover:bg-[#F8FAFC]'}`}
-                          style={{ gridTemplateColumns: '32px ' + orderedColumns.filter(c => visibleColumns[c.key]).map(c => c.key === 'login' ? '80px' : c.key === 'name' ? '90px' : c.key === 'actions' ? '80px' : '110px').join(' ') }}
+                          className={`grid text-[10px] text-[#4B4B4B] font-outfit border-b border-[#E1E1E1] transition-colors ${isChecked ? 'bg-blue-50' : 'bg-transparent hover:bg-white/50'}`}
+                          style={{ gridTemplateColumns: '32px ' + orderedColumns.filter(c => visibleColumns[c.key]).map(c => c.key === 'login' ? '80px' : c.key === 'name' ? '90px' : c.key === 'actions' ? '92px' : '110px').join(' ') }}
                         >
-                          <div className="h-[38px] flex items-center justify-center sticky left-0 z-10" style={{ background: isChecked ? '#EFF6FF' : 'white' }}>
+                          <div className="h-[38px] flex items-center justify-center sticky left-0 z-10" style={{ background: isChecked ? '#EFF6FF' : '#FFFFFF' }}>
                             <input
                               type="checkbox"
                               checked={isChecked}
@@ -1513,7 +1513,7 @@ const BillsPage = () => {
                           </div>
                           {orderedColumns.filter(c => visibleColumns[c.key]).map(col => {
                             const stickyClass = isMobilePinned(col) ? 'sticky z-10' : ''
-                            const stickyStyle = isMobilePinned(col) ? { boxShadow: '2px 0 4px rgba(0,0,0,0.05)', background: isChecked ? '#EFF6FF' : 'white', left: `${mobilePinnedOffsets[col.key] || 32}px` } : {}
+                            const stickyStyle = isMobilePinned(col) ? { boxShadow: '2px 0 4px rgba(0,0,0,0.05)', background: isChecked ? '#EFF6FF' : '#FFFFFF', left: `${mobilePinnedOffsets[col.key] || 32}px` } : {}
                             switch (col.key) {
                               case 'login':
                                 return (
@@ -1545,12 +1545,12 @@ const BillsPage = () => {
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); downloadOne(r.Login) }}
                                         disabled={busyLogin === r.Login}
-                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded disabled:opacity-50"
+                                        className="inline-flex items-center gap-1 h-6 px-2 rounded-lg bg-[#2563EB] text-white text-[10px] font-semibold shadow-[0_2px_6px_rgba(37,99,235,0.3)] active:bg-blue-700 disabled:opacity-50"
                                       >
                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 12V4m0 8l-3-3m3 3l3-3" />
                                         </svg>
-                                        {busyLogin === r.Login ? '…' : 'DL'}
+                                        {busyLogin === r.Login ? '…' : 'Download'}
                                       </button>
                                     ) : (
                                       <span className="text-[9px] text-gray-400">—</span>
@@ -1569,12 +1569,12 @@ const BillsPage = () => {
                 </div>
               </div>
 
-              {/* Mobile Footer */}
-              <div className="flex items-center justify-end px-3 py-2 border-t border-gray-100 bg-white">
-                {selected.size > 0 && (
+              {/* Mobile Footer: only when rows are selected (an empty strip would add a second line above the nav) */}
+              {selected.size > 0 && (
+                <div className="flex items-center justify-end px-3 py-2 border-t border-blue-100 bg-transparent">
                   <div className="text-[10px] text-blue-700 font-medium">{selected.size} selected</div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* ═══ DESKTOP Table (original <table> — hidden on mobile) ═══ */}
@@ -1748,204 +1748,15 @@ const BillsPage = () => {
             </div>
           </div>
         </div>
+        {/* Bottom Navigation (mobile only) */}
+        <div className="sm:hidden -mx-3 -mb-3">
+          <MobileBottomNav onMore={() => setSidebarOpen(true)} />
+        </div>
       </main>
 
       {/* Mobile Sidebar Drawer (same pattern as other mobile modules) */}
-      {isMobile && sidebarOpen && (
-        <div className="fixed inset-0 z-30">
-          <div className="absolute inset-0 bg-black/10" onClick={closeMobileSidebar} />
-          <div className="absolute left-0 top-0 h-full w-[300px] bg-white shadow-xl rounded-r-2xl flex flex-col">
-            <div className="p-4 flex items-center gap-3 border-b border-[#ECECEC]">
-              <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#1A63BC"/></svg>
-              </div>
-              <div className="flex-1">
-                <div className="text-[14px] font-semibold text-[#1A63BC]">Broker Eye</div>
-                <div className="text-[11px] text-[#7A7A7A]">Financial Dashboard</div>
-              </div>
-              <button
-                onClick={closeMobileSidebar}
-                className="w-8 h-8 rounded-lg bg-[#F5F5F5] flex items-center justify-center"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#404040" strokeWidth="2" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-auto py-2" {...drawerTapGuard}>
-              <div className="px-3 pb-3 pt-1">
-                <p className="text-[9px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1.5 px-1">Display Mode</p>
-                <div className="flex items-center bg-[#F3F4F6] p-0.5 w-full rounded">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNumericMode('compact')
-                      try { localStorage.setItem('globalDisplayMode', 'compact') } catch { /* Retain the fallback when this operation is unavailable. */ }
-                      try { window.dispatchEvent(new CustomEvent('globalDisplayModeChanged', { detail: 'compact' })) } catch { /* Retain the fallback when this operation is unavailable. */ }
-                    }}
-                    className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${numericMode === 'compact' ? 'bg-[#3B5BDB] text-white shadow-sm' : 'text-[#374151] hover:bg-white/70'}`}
-                  >
-                    Compact
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNumericMode('full')
-                      try { localStorage.setItem('globalDisplayMode', 'full') } catch { /* Retain the fallback when this operation is unavailable. */ }
-                      try { window.dispatchEvent(new CustomEvent('globalDisplayModeChanged', { detail: 'full' })) } catch { /* Retain the fallback when this operation is unavailable. */ }
-                    }}
-                    className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${numericMode === 'full' ? 'bg-[#3B5BDB] text-white shadow-sm' : 'text-[#374151] hover:bg-white/70'}`}
-                  >
-                    Full
-                  </button>
-                </div>
-              </div>
-              <div className="border-t border-[#ECECEC] mb-2" />
-              <nav className="flex flex-col">
-                {[
-                  { label: 'Clients', path: '/client2' },
-                  { label: 'Positions', path: '/positions' },
-                  { label: 'Pending Orders', path: '/pending-orders' },
-                  { label: 'Margin Level', path: '/margin-level' },
-                  { label: 'Live Dealing', path: '/live-dealing' },
-                  { label: 'Client Percentage', path: '/client-percentage' },
-                  { label: 'Bills', path: '/bills' },
-                  { label: 'Reports', path: '/reports/exchange' },
-                  { label: 'Settings', path: '/settings' },
-                ].map((item) => {
-                  if (item.path === '/reports/exchange') {
-                    return (
-                      <div key={item.path}>
-                        <button
-                          type="button"
-                          onClick={() => setMobileReportsOpen(value => !value)}
-                          className={`flex items-center gap-3 px-4 h-11 w-full text-left text-[13px] ${mobileReportsOpen || location.pathname.startsWith('/reports') ? 'text-[#404040]' : 'text-[#404040]'}`}
-                          style={{ touchAction: 'manipulation' }}
-                        >
-                          <span className="w-5 h-5 flex items-center justify-center">
-                            <ReportsIcon className="w-5 h-5 text-black" />
-                          </span>
-                          <span className="flex-1">Reports</span>
-                          <svg className={`w-4 h-4 transition-transform ${mobileReportsOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                        {mobileReportsOpen && (
-                          <div className="flex flex-col pb-1">
-                            <button
-                              type="button"
-                              onClick={() => handleMobileNavSelect('/reports/exchange')}
-                              className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/exchange' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                              style={{ touchAction: 'manipulation' }}
-                            >
-                              <ReportSubIcon path="/reports/exchange" />
-                              Brokerage Data
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMobileNavSelect('/reports/historical-positions')}
-                              className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/historical-positions' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                              style={{ touchAction: 'manipulation' }}
-                            >
-                              <ReportSubIcon path="/reports/historical-positions" />
-                              Historical Positions
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMobileNavSelect('/reports/deals')}
-                              className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/deals' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                              style={{ touchAction: 'manipulation' }}
-                            >
-                              <ReportSubIcon path="/reports/deals" />
-                              Deals
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMobileNavSelect('/reports/credit')}
-                              className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/credit' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                              style={{ touchAction: 'manipulation' }}
-                            >
-                              <ReportSubIcon path="/reports/credit" />
-                              Credit Report
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMobileNavSelect('/reports/agent-details')}
-                              className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/agent-details' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                              style={{ touchAction: 'manipulation' }}
-                            >
-                              <ReportSubIcon path="/reports/agent-details" />
-                              Agent Details
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMobileNavSelect('/reports/deposit-withdrawal')}
-                              className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/deposit-withdrawal' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                              style={{ touchAction: 'manipulation' }}
-                            >
-                              <ReportSubIcon path="/reports/deposit-withdrawal" />
-                              D/W Report
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMobileNavSelect('/reports/settlement')}
-                              className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/settlement' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                              style={{ touchAction: 'manipulation' }}
-                            >
-                              <ReportSubIcon path="/reports/settlement" />
-                              Settlement Report
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  }
-
-                  return (
-                    <button
-                      key={item.path}
-                      onClick={() => handleMobileNavSelect(item.path)}
-                      className={`flex items-center gap-3 px-4 h-11 text-[13px] ${location.pathname === item.path ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      <span className="w-5 h-5 flex items-center justify-center">
-                        <img
-                          src={`${import.meta.env.BASE_URL || '/'}sidebar-icons/${{
-                            '/client2': 'Clients',
-                            '/positions': 'Positions',
-                            '/pending-orders': 'Pending-Orders',
-                            '/margin-level': 'Margin-Level',
-                            '/live-dealing': 'Live-Dealing',
-                            '/client-percentage': 'Client-Percentage',
-                            '/bills': 'Bills',
-                            '/settings': 'Settings'
-                          }[item.path]}.svg`}
-                          alt={item.label}
-                          style={{ filter: 'brightness(0)' }}
-                          className="w-5 h-5"
-                        />
-                      </span>
-                      <span>{item.label}</span>
-                    </button>
-                  )
-                })}
-              </nav>
-            </div>
-
-            <div className="p-4 mt-auto border-t border-[#ECECEC]">
-              <button
-                onClick={async () => {
-                  await logout()
-                  closeMobileSidebar()
-                }}
-                className="flex items-center gap-3 px-2 h-[37px] text-[10px] text-[#404040]"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M10 17l5-5-5-5" stroke="#404040" strokeWidth="2"/><path d="M4 12h11" stroke="#404040" strokeWidth="2"/></svg>
-                <span>Logout</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Shared mobile navigation drawer — one menu for every module (components/Sidebar.jsx) */}
+      {isMobile && <Sidebar isOpen={sidebarOpen} onClose={closeMobileSidebar} mobileOnly />}
 
       {/* Group Modal */}
       <GroupModal
@@ -2030,22 +1841,34 @@ const BillsPage = () => {
 
       {/* Mobile Column Selector Modal — show/hide + pin + drag reorder (same saved settings as desktop) */}
       {showColumnChooser && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:hidden" onClick={() => setShowColumnChooser(false)}>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:hidden" onClick={() => setShowColumnChooser(false)}>
+          {/* Scoped restyle of the shared ColumnChooserList to match the mobile theme */}
+          <style>{`
+            .c2-col-chooser > div > div { border-color: #D5DEEA !important; }
+            .c2-col-chooser input[type="text"] { background: transparent !important; border-color: #D5DEEA !important; border-radius: 12px !important; height: 40px; font-size: 13px !important; }
+            .c2-col-chooser input[type="checkbox"] { width: 16px !important; height: 16px !important; accent-color: #2563EB; border-radius: 4px; }
+            .c2-col-chooser .overscroll-contain > [data-col-key] { padding-top: 10px; padding-bottom: 10px; margin-left: 12px; margin-right: 12px; border-radius: 0; border-bottom: 1px solid rgba(213, 222, 234, 0.6); }
+            .c2-col-chooser .overscroll-contain > [data-col-key] label span { font-size: 13px !important; color: #1F2937 !important; }
+          `}</style>
           <div
-            className="bg-white w-full rounded-t-[24px] flex flex-col overflow-hidden"
+            className="bg-white w-full rounded-t-[28px] flex flex-col overflow-hidden shadow-[0_-8px_30px_rgba(15,23,42,0.12)]"
             style={{ maxHeight: '85dvh' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between flex-shrink-0">
-              <h3 className="text-base font-semibold text-[#000000]">Show/Hide & Reorder Columns</h3>
-              <button onClick={() => setShowColumnChooser(false)} aria-label="Close">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="#404040" strokeWidth="2"/>
+            <div className="pt-2.5 flex justify-center flex-shrink-0"><span className="w-10 h-1 rounded-full bg-[#CBD5E1]" /></div>
+            <div className="px-5 pt-3 pb-3 border-b border-[#D5DEEA] flex items-center justify-between gap-3 flex-shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-[18px] leading-6 font-extrabold tracking-tight text-[#0F172A] truncate">Columns</h3>
+                <p className="text-[12px] text-[#64748B] truncate">Show, hide, pin & reorder columns</p>
+              </div>
+              <button onClick={() => setShowColumnChooser(false)} aria-label="Close" className="w-10 h-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="#0F172A" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 flex flex-col">
+            <div className="c2-col-chooser flex-1 min-h-0 flex flex-col">
               <ColumnChooserList
                 columns={ALL_BILL_COLUMNS.map(({ key, label }) => ({ key, label }))}
                 visibleColumns={visibleColumns}

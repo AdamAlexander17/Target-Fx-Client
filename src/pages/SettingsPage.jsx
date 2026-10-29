@@ -1,4 +1,5 @@
 import BrokerCreditSummary from '../components/BrokerCreditSummary'
+import MobileBottomNav from '../components/MobileBottomNav'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/authContextStore'
 import { authAPI, brokerAPI } from '../services/api'
@@ -65,13 +66,13 @@ const SettingsPage = () => {
 
   // Reusable Change Password card (used in both desktop and mobile layouts).
   const changePasswordCard = (
-    <div className="mb-4 overflow-hidden rounded-lg border border-blue-100 bg-white p-4 shadow-sm">
+    <div className={isMobile ? 'overflow-hidden rounded-2xl border border-[#D5DEEA] bg-transparent p-4' : 'mb-4 overflow-hidden rounded-lg border border-blue-100 bg-white p-4 shadow-sm'}>
       <div className="mb-3 flex items-center gap-2.5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100">
+        <span className={isMobile ? 'flex h-9 w-9 items-center justify-center rounded-xl bg-[#2563EB]/10' : 'flex h-8 w-8 items-center justify-center rounded-full bg-blue-100'}>
           <svg className="h-4 w-4 text-blue-600" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="1.8" /><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
         </span>
         <div>
-          <h2 className="text-sm font-semibold text-gray-900">Change Password</h2>
+          <h2 className="text-sm font-semibold text-gray-900 max-lg:text-[14px] max-lg:font-bold max-lg:text-[#0F172A]">Change Password</h2>
           <p className="text-[11px] text-gray-400">Update your Broker Eye login password</p>
         </div>
       </div>
@@ -82,7 +83,7 @@ const SettingsPage = () => {
         ].map(f => (
           <label key={f.label} className="block">
             <span className="mb-1 block text-xs font-medium text-gray-500">{f.label}</span>
-            <input type={showPasswords ? 'text' : 'password'} autoComplete={f.auto} value={f.value} onChange={e => f.set(e.target.value)} placeholder="••••••••" className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+            <input type={showPasswords ? 'text' : 'password'} autoComplete={f.auto} value={f.value} onChange={e => f.set(e.target.value)} placeholder="••••••••" className={isMobile ? 'h-10 w-full rounded-xl border border-[#D5DEEA] bg-transparent px-3 text-[13px] text-[#0F172A] outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-blue-100' : 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100'} />
           </label>
         ))}
         <div className="flex items-center justify-between gap-3 sm:col-span-2">
@@ -90,7 +91,7 @@ const SettingsPage = () => {
             <input type="checkbox" checked={showPasswords} onChange={e => setShowPasswords(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
             Show passwords
           </label>
-          <button type="submit" disabled={changingPassword} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50">{changingPassword ? 'Updating…' : 'Update password'}</button>
+          <button type="submit" disabled={changingPassword} className={isMobile ? 'h-10 rounded-xl bg-[#2563EB] px-4 text-[13px] font-semibold text-white shadow-[0_4px_10px_rgba(37,99,235,0.3)] disabled:opacity-50' : 'rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50'}>{changingPassword ? 'Updating…' : 'Update password'}</button>
         </div>
       </form>
     </div>
@@ -282,7 +283,7 @@ const SettingsPage = () => {
   // ── Mobile layout ──────────────────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div className="flex h-screen flex-col overflow-hidden bg-[#F8FAFC]">
+      <div className="flex h-[100dvh] flex-col overflow-hidden bg-white">
         <Sidebar
           isOpen={isMobileSidebarOpen}
           onClose={() => setIsMobileSidebarOpen(false)}
@@ -291,15 +292,20 @@ const SettingsPage = () => {
         />
 
         {/* Fixed header (the content below is the scroll area) */}
-        <div className="shrink-0 bg-white shadow-md z-30 px-4 py-5">
-          <div className="flex items-center justify-between">
-            <button aria-label="Open navigation" onClick={() => setIsMobileSidebarOpen(true)} className="w-9 h-9 flex items-center justify-center">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <div className="shrink-0 bg-transparent z-30 px-4 pt-4 pb-2">
+          <div className="flex items-center gap-3">
+            <button aria-label="Open navigation" onClick={() => setIsMobileSidebarOpen(true)} className="w-12 h-12 flex-shrink-0 rounded-2xl border border-[#D5DEEA] bg-transparent flex items-center justify-center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
                 <path d="M3 6h18M3 12h18M3 18h18" stroke="#000" strokeWidth="2" strokeLinecap="round"/>
               </svg>
             </button>
-            <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="text-xl font-semibold text-black min-w-0 max-sm:text-sm">Settings</h1><BrokerCreditSummary variant="header" /></div>
-            <div className="w-9 h-9" />
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className="truncate text-[#0F172A]">Settings</h1>
+                <p className="truncate text-[12px] text-[#64748B]">Account, password and security</p>
+              </div>
+              <BrokerCreditSummary variant="header" />
+            </div>
           </div>
         
 
@@ -307,7 +313,7 @@ const SettingsPage = () => {
 <BrokerCreditSummary variant="desktop-header" />
 </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 space-y-4" style={{ WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + var(--app-safe-bottom, 0px))' }}>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-2 pb-4 space-y-3" style={{ WebkitOverflowScrolling: 'touch' }}>
 
           {/* Alert messages */}
           {error && (
@@ -338,29 +344,29 @@ const SettingsPage = () => {
           )}
 
           {/* Account Information */}
-          <div className="bg-white rounded-xl border-2 border-gray-100 shadow-sm overflow-hidden">
+          <div className="overflow-hidden rounded-2xl border border-[#D5DEEA] bg-transparent">
             {/* Card header */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-[#D5DEEA]">
+              <div className="w-9 h-9 rounded-xl bg-[#2563EB]/10 flex items-center justify-center flex-shrink-0">
                 <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
               </div>
-              <span className="text-[13px] font-semibold text-gray-900">Account Information</span>
+              <span className="text-[14px] font-bold text-[#0F172A]">Account Information</span>
             </div>
             {/* Fields */}
             {[
               { label: 'Full Name', value: user?.full_name || 'N/A' },
               { label: 'Email',     value: user?.email },
               { label: 'Username',  value: user?.username },
-            ].map(({ label, value }, idx, arr) => (
-              <div key={label} className={`flex items-center justify-between px-4 py-3 ${idx < arr.length - 1 ? 'border-b border-gray-50' : ''}`}>
-                <span className="text-[12px] text-gray-500">{label}</span>
-                <span className="text-[13px] font-medium text-gray-900 text-right max-w-[60%] truncate">{value}</span>
+            ].map(({ label, value }) => (
+              <div key={label} className={`flex items-center justify-between px-4 py-3 border-b border-[#D5DEEA]/60`}>
+                <span className="text-[12px] text-[#64748B]">{label}</span>
+                <span className="text-[13px] font-semibold text-[#0F172A] text-right max-w-[60%] truncate">{value}</span>
               </div>
             ))}
             <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-[12px] text-gray-500">Status</span>
+              <span className="text-[12px] text-[#64748B]">Status</span>
               <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${user?.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                 {user?.is_active ? 'Active' : 'Inactive'}
               </span>
@@ -371,17 +377,17 @@ const SettingsPage = () => {
           {changePasswordCard}
 
           {/* Two-Factor Authentication */}
-          <div className="bg-white rounded-xl border-2 border-gray-100 shadow-sm overflow-hidden">
+          <div className="overflow-hidden rounded-2xl border border-[#D5DEEA] bg-transparent">
             {/* Card header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#D5DEEA]">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-[#2563EB]/10 flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
                 </div>
                 <div>
-                  <span className="text-[13px] font-semibold text-gray-900 block">Two-Factor Authentication</span>
+                  <span className="text-[14px] font-bold text-[#0F172A] block">Two-Factor Authentication</span>
                   <span className="text-[11px] text-gray-400">Extra security for your account</span>
                 </div>
               </div>
@@ -393,7 +399,7 @@ const SettingsPage = () => {
             <div className="p-4">
               {!showSetup ? (
                 !twoFAStatus?.is_enabled ? (
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+                  <div className="bg-[#2563EB]/[0.05] border border-[#2563EB]/20 rounded-2xl p-4">
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
                         <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -402,20 +408,21 @@ const SettingsPage = () => {
                       </div>
                       <div className="flex-1">
                         <h3 className="text-[13px] font-semibold text-gray-900 mb-1">Enable Two-Factor Authentication</h3>
-                        <p className="text-[12px] text-gray-500 mb-3">Add an extra layer of security to your account with 2FA</p>
-                        <button onClick={handleSetup2FA} disabled={actionLoading}
-                          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 text-white px-4 py-2.5 rounded-xl text-[13px] font-medium inline-flex items-center gap-2 shadow-sm w-full justify-center">
-                          {actionLoading ? (
-                            <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Setting up...</>
-                          ) : (
-                            <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>Enable 2FA</>
-                          )}
-                        </button>
+                        <p className="text-[12px] text-gray-500 mb-0">Add an extra layer of security to your account with 2FA</p>
                       </div>
                     </div>
+                    {/* Full-width under the icon + text row, so it lines up with the panel */}
+                    <button onClick={handleSetup2FA} disabled={actionLoading}
+                      className="mt-3 bg-[#2563EB] disabled:opacity-60 text-white h-11 px-4 rounded-[14px] text-[13px] font-semibold inline-flex items-center gap-2 shadow-[0_4px_10px_rgba(37,99,235,0.3)] w-full justify-center">
+                      {actionLoading ? (
+                        <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Setting up...</>
+                      ) : (
+                        <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>Enable 2FA</>
+                      )}
+                    </button>
                   </div>
                 ) : (
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
+                  <div className="bg-emerald-500/[0.06] border border-emerald-300/50 rounded-2xl p-4">
                     <div className="flex items-start gap-3 mb-4">
                       <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
                         <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -429,12 +436,12 @@ const SettingsPage = () => {
                     </div>
                     <div className="flex flex-col gap-2">
                       <button onClick={handleRegenerateBackupCodes} disabled={actionLoading}
-                        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 text-white px-4 py-2.5 rounded-xl text-[13px] font-medium inline-flex items-center justify-center gap-2 shadow-sm">
+                        className="bg-[#2563EB] disabled:opacity-60 text-white h-11 px-4 rounded-[14px] text-[13px] font-semibold inline-flex items-center justify-center gap-2 shadow-[0_4px_10px_rgba(37,99,235,0.3)]">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                         {actionLoading ? 'Generating...' : 'Regenerate Backup Codes'}
                       </button>
                       <button onClick={handleDisable2FA} disabled={actionLoading}
-                        className="bg-white hover:bg-red-50 border border-red-200 disabled:opacity-60 text-red-600 px-4 py-2.5 rounded-xl text-[13px] font-medium inline-flex items-center justify-center gap-2">
+                        className="bg-transparent border border-red-200 disabled:opacity-60 text-red-600 h-11 px-4 rounded-[14px] text-[13px] font-semibold inline-flex items-center justify-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                         {actionLoading ? 'Disabling...' : 'Disable 2FA'}
                       </button>
@@ -455,6 +462,9 @@ const SettingsPage = () => {
           </div>
         </div>
 
+        {/* Bottom Navigation */}
+        <div className="flex-shrink-0"><MobileBottomNav onMore={() => setIsMobileSidebarOpen(true)} /></div>
+
         {/* Backup Codes Modal */}
         {showBackupCodes && (
           <BackupCodesModal backupCodes={backupCodes} onClose={() => { setShowBackupCodes(false); setBackupCodes([]) }} />
@@ -465,7 +475,7 @@ const SettingsPage = () => {
   // ── End mobile layout ──────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
+    <div className="flex h-[100dvh] overflow-hidden bg-[#F8FAFC]">
       {/* Sidebar */}
       {!isMobile && (
         <Sidebar

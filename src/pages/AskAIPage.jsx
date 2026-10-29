@@ -21,13 +21,14 @@ import AiCommandPalette from '../components/ai/AiCommandPalette'
 import AiTokenDialog from '../components/ai/AiTokenDialog'
 import AiFeedbackDialog from '../components/ai/AiFeedbackDialog'
 import AiConversationList from '../components/ai/AiConversationList'
+import AiMic from '../components/ai/AiMic'
 
 const MAX_ATTACHMENTS = 5
 
 const STARTERS = [
-  { title: 'Margin watch', text: 'Which clients currently need my attention because of low margin level?' },
-  { title: 'Daily pulse', text: 'Give me a concise summary of today\'s trading activity and P&L.' },
-  { title: 'Client lookup', text: 'Show me the most important details for client login' }
+  { title: 'Margin watch', text: 'Which clients currently need my attention because of low margin level?', icon: 'M3 20h18M6 16v-3M10 16V9M14 16v-5M18 16V6', tint: 'from-amber-50 to-orange-50 text-amber-600 ring-amber-100' },
+  { title: 'Daily pulse', text: 'Give me a concise summary of today\'s trading activity and P&L.', icon: 'M3 12h4l2.5-6 4 12 2.5-6H21', tint: 'from-emerald-50 to-teal-50 text-emerald-600 ring-emerald-100' },
+  { title: 'Client lookup', text: 'Show me the most important details for client login', icon: 'M15.5 15.5 20 20M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Z', tint: 'from-blue-50 to-indigo-50 text-blue-600 ring-blue-100' }
 ]
 
 // Matches the reference app's fmtTok(): 3600 -> "3.6k", 420 -> "420".
@@ -75,7 +76,7 @@ const stripQuote = (text) => {
   return m ? m[2] : (text || '')
 }
 
-function MessageBubble({ message, isLast, question, onFeedback, onConfirm, onCancel, actionBusy, onReply, onPin, onRetry, onAsk, onPrefill, onOpenClient, onCopy, onEditResend, onSave, onSchedule }) {
+function MessageBubble({ message, isLast, question, onFeedback, onConfirm, onCancel, actionBusy, onReply, onPin, onRetry, onAsk, onPrefill, onOpenClient, onCopy, onEditResend, onSave, onSchedule, onSpeak, isSpeaking }) {
   const isUser = message.role === 'user'
   if (isUser) {
     return (
@@ -90,7 +91,17 @@ function MessageBubble({ message, isLast, question, onFeedback, onConfirm, onCan
               <span className="line-clamp-2 whitespace-pre-wrap">{message.replyTo}</span>
             </div>
           )}
-          <div className="max-w-3xl rounded-xl border border-blue-300 bg-blue-50 px-4 py-1.5 text-sm leading-6 text-black">{message.text}</div>
+          {message.voiceUrl ? (
+            <div className="max-w-3xl rounded-xl border border-blue-300 bg-blue-50 px-2.5 py-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white" aria-hidden="true"><svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg></span>
+                <audio controls controlsList="nodownload noplaybackrate" onContextMenu={event => event.preventDefault()} preload="metadata" src={message.voiceUrl} className="h-9 w-[230px] max-w-full" aria-label="Your voice message" />
+              </div>
+              <p className="mt-1 px-1 text-[12px] italic leading-5 text-slate-600">“{message.text}”</p>
+            </div>
+          ) : (
+            <div className="max-w-3xl rounded-xl border border-blue-300 bg-blue-50 px-4 py-1.5 text-sm leading-6 text-black">{message.text}</div>
+          )}
           <div className="mt-1.5 flex items-center gap-1 px-1">
             <button type="button" onClick={() => onReply(message)} aria-label="Reply" title="Reply" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700">
               <svg className="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 17 4 12l5-5" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></svg>
@@ -128,6 +139,13 @@ function MessageBubble({ message, isLast, question, onFeedback, onConfirm, onCan
             <button type="button" onClick={() => onCopy(message)} aria-label="Copy answer" title="Copy answer" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700">
               <svg className="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
             </button>
+            {!!plainTextOf(message) && 'speechSynthesis' in window && (
+              <button type="button" onClick={() => onSpeak(message)} aria-label={isSpeaking ? 'Stop reading answer' : 'Read answer aloud'} title={isSpeaking ? 'Stop reading' : 'Read answer aloud'} className={`flex h-7 w-7 items-center justify-center rounded-md ${isSpeaking ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-100 hover:text-blue-600'}`}>
+                {isSpeaking
+                  ? <svg className="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                  : <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /></svg>}
+              </button>
+            )}
             <button type="button" onClick={() => onFeedback(message, 1)} aria-label="Good answer" title="Good answer" className={`flex h-7 w-7 items-center justify-center rounded-md ${message.rating === 1 ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}>
               <svg className="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 11v10H4V11h3Zm3 10h7a3 3 0 0 0 3-2.6l1-6A3 3 0 0 0 18 9h-5l1-4a2 2 0 0 0-3.6-1.5L10 9" /></svg>
             </button>
@@ -192,6 +210,7 @@ export default function AskAIPage() {
   const [clientLogin, setClientLogin] = useState(null)
   const [tokenOpen, setTokenOpen] = useState(false)
   const [feedbackTarget, setFeedbackTarget] = useState(null)
+  const [speakingKey, setSpeakingKey] = useState(null)
   const scrollRef = useRef(null)
   const abortRef = useRef(null)
   const fileRef = useRef(null)
@@ -199,6 +218,35 @@ export default function AskAIPage() {
   const conversationSearchRef = useRef(null)
   const moreRef = useRef(null)
   const mobileMoreRef = useRef(null)
+  const speechRef = useRef(null)
+
+  const toggleReadAloud = (message, key) => {
+    if (!('speechSynthesis' in window) || typeof window.SpeechSynthesisUtterance !== 'function') return
+    if (speechRef.current?.key === key) {
+      window.speechSynthesis.cancel()
+      speechRef.current = null
+      setSpeakingKey(null)
+      return
+    }
+    window.speechSynthesis.cancel()
+    const text = plainTextOf(message)
+    if (!text) return
+    const utterance = new window.SpeechSynthesisUtterance(text)
+    utterance.lang = navigator.language || 'en-US'
+    utterance.onend = utterance.onerror = () => {
+      if (speechRef.current?.utterance === utterance) {
+        speechRef.current = null
+        setSpeakingKey(null)
+      }
+    }
+    speechRef.current = { key, utterance }
+    setSpeakingKey(key)
+    window.speechSynthesis.speak(utterance)
+  }
+
+  useEffect(() => () => {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+  }, [])
 
   useEffect(() => {
     if (!searchOpen) return undefined
@@ -311,7 +359,8 @@ export default function AskAIPage() {
 
   useEffect(() => {
     const node = scrollRef.current
-    if (node) node.scrollTop = node.scrollHeight
+    // A chat follows the newest message; the empty welcome screen starts at its top (logo, badge)
+    if (node) node.scrollTop = messages.length ? node.scrollHeight : 0
   }, [messages, sending])
 
   // Appends to (or starts) the trailing text part so streamed deltas read as one continuous
@@ -324,7 +373,7 @@ export default function AskAIPage() {
     return next
   }
 
-  const sendMessage = async (event, overrideText) => {
+  const sendMessage = async (event, overrideText, extra = {}) => {
     event?.preventDefault()
     const typed = (overrideText ?? draft).trim()
     if (!typed || sending) return
@@ -334,7 +383,7 @@ export default function AskAIPage() {
     setReplyTarget(null)
     setError('')
     setSending(true)
-    const userMessage = { role: 'user', text: typed, replyTo: quoted || null, createdAt: new Date().toISOString() }
+    const userMessage = { role: 'user', text: typed, replyTo: quoted || null, createdAt: new Date().toISOString(), ...extra }
     const assistantMessage = { role: 'assistant', parts: [], steps: [], stage: 'Thinking...', suggestions: [], status: 'streaming', createdAt: new Date().toISOString() }
     setMessages(current => [...current, userMessage, assistantMessage])
     const controller = new AbortController()
@@ -546,10 +595,10 @@ export default function AskAIPage() {
 
   const retryMessage = (question) => sendMessage(null, question)
 
-  const resolveAction = async (actionId, method) => {
+  const resolveAction = async (actionId, method, body) => {
     setActionBusy(actionId)
     try {
-      const result = await method(actionId)
+      const result = await method(actionId, body)
       setMessages(current => current.map(message => ({
         ...message,
         parts: (message.parts || []).map(part => part.kind === 'action' && part.action.id === actionId ? { ...part, action: result } : part),
@@ -595,7 +644,7 @@ export default function AskAIPage() {
       <Sidebar mobileOnly isOpen={appMenuOpen} onClose={() => setAppMenuOpen(false)} onToggle={() => setAppMenuOpen(value => !value)} />
       <main className="min-w-0 flex-1 flex flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1">
-          <aside className={`${historyOpen ? 'w-72 px-4' : 'w-11 px-1'} hidden shrink-0 overflow-hidden border-r border-slate-200 bg-white py-5 transition-all duration-200 md:flex md:flex-col`}>
+          <aside className={`${historyOpen ? 'w-72 px-4' : 'w-11 px-1'} hidden shrink-0 overflow-hidden border-r border-slate-200/80 bg-gradient-to-b from-slate-50/80 via-white to-white py-5 transition-all duration-200 md:flex md:flex-col`}>
             {historyOpen && (
               <button type="button" onClick={() => navigate('/client2')} className="group mb-3 flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700" title="Back to BrokerEye App">
                 <svg className="h-[18px] w-[18px] shrink-0 transition-transform group-hover:-translate-x-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -604,22 +653,24 @@ export default function AskAIPage() {
             )}
             <div className={`${historyOpen ? '' : 'relative h-full justify-center'} flex items-center justify-between gap-2 px-1`}>
               <div className={`${historyOpen ? 'flex' : 'hidden'} min-w-0 flex-1 items-center gap-2`}>
-                <AskAiIcon className="h-7 w-7 shrink-0" />
-                <p className="truncate text-[15px] font-bold tracking-tight text-slate-900">BrokerEye AI</p>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center"><AskAiIcon className="h-7 w-7" /></span>
+                <span className="min-w-0">
+                  <p className="truncate text-[15px] font-bold leading-5 tracking-tight text-slate-900">BrokerEye <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">AI</span></p>
+                  <p className="truncate text-[10.5px] font-medium text-slate-400">Your trading desk assistant</p>
+                </span>
               </div>
               <div className={`${historyOpen ? 'flex shrink-0' : 'absolute left-1/2 top-0 -translate-x-1/2'} items-center gap-1`}>
-                <button type="button" onClick={() => setSearchOpen(true)} className={`${historyOpen ? 'flex' : 'hidden'} h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition hover:bg-blue-50 hover:text-blue-600`} aria-label="Search conversations" title="Search conversations">
+                <button type="button" onClick={() => setSearchOpen(true)} className={`${historyOpen ? 'flex' : 'hidden'} h-8 w-8 items-center justify-center rounded-lg bg-transparent text-slate-600 transition hover:bg-blue-50 hover:text-blue-600`} aria-label="Search conversations" title="Search conversations">
                   <svg className="h-[19px] w-[19px]" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" strokeWidth="2" /><path d="m16 16 4.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
                 </button>
-                <button type="button" onClick={() => setHistoryOpen(value => !value)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition hover:bg-blue-50 hover:text-blue-600" aria-label={historyOpen ? 'Close conversation history' : 'Open conversation history'} title={historyOpen ? 'Close conversation history' : 'Open conversation history'}>
+                <button type="button" onClick={() => setHistoryOpen(value => !value)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-transparent text-slate-600 transition hover:bg-blue-50 hover:text-blue-600" aria-label={historyOpen ? 'Close conversation history' : 'Open conversation history'} title={historyOpen ? 'Close conversation history' : 'Open conversation history'}>
                   <svg className="h-[19px] w-[19px]" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="2" /><path d="M9 4v16" stroke="currentColor" strokeWidth="2" /></svg>
                 </button>
               </div>
             </div>
             {historyOpen && <>
-            <button type="button" onClick={newConversation} className="mt-5 flex items-center gap-2.5 rounded-lg bg-slate-100 px-3 py-2.5 text-left text-[12px] font-semibold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"><svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg> New chat</button>
+            <button type="button" onClick={newConversation} className="mt-5 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-2.5 text-[13px] font-semibold text-white transition hover:from-blue-700 hover:to-indigo-700 active:scale-[0.99]"><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg> New chat</button>
             {searchOpen && <div className="relative mt-3"><label className="block"><span className="sr-only">Search conversations</span><svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" strokeWidth="1.8" /><path d="m16 16 4.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg><input ref={conversationSearchRef} value={conversationSearch} onChange={event => setConversationSearch(event.target.value)} placeholder="Search conversations" className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-9 text-[11px] text-slate-700 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" /></label><button type="button" onClick={() => { setSearchOpen(false); setConversationSearch('') }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700" aria-label="Close search" title="Close search"><svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></button></div>}
-            <button type="button" onClick={() => setConversationsOpen(true)} className="mt-3 flex w-full items-center justify-between rounded-lg bg-slate-50 px-2.5 py-2 text-left text-[11px] font-semibold text-slate-700 hover:bg-slate-100" aria-label="Select current conversation"><span className="truncate">{conversationId ? conversations.find(item => item.id === conversationId)?.title || 'Current conversation' : 'New conversation'}</span><svg className="h-4 w-4 shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 9 5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
             <div className="history-edge-scrollbar compact-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto">
               {!loading && <AiConversationList conversations={visibleConversations} saved={visibleSaved} activeId={conversationId} searchActive={!!conversationSearch.trim()} onSelect={chooseConversation} onDelete={deleteConversation} onAskSaved={text => sendMessage(null, text)} onDeleteSaved={deleteSaved} />}
             </div>
@@ -743,28 +794,43 @@ export default function AskAIPage() {
                 onDrop={e => { e.preventDefault(); setDragOver(false); attachFiles(e.dataTransfer.files) }}
               >
                 {!messages.length ? (
-                  <div className="mx-auto flex min-h-full max-w-5xl flex-col justify-center">
-                    <div className="mb-8">
-                      <div className="mb-4 inline-flex h-12 w-12 items-center justify-center"><AskAiIcon className="h-11 w-11" /></div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Live broker intelligence</p>
-                      <h2 className="text-3xl font-bold tracking-tight text-slate-900">A sharper view of your trading desk.</h2>
+                  <div className="relative mx-auto flex min-h-full max-w-5xl flex-col [justify-content:safe_center]">
+                    <div className="relative mb-8">
+                      <div className="mb-4 flex items-center gap-3">
+                        <AskAiIcon className="h-12 w-12 shrink-0" />
+                        <span className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />Live broker intelligence</span>
+                      </div>
+                      <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-[34px] sm:leading-tight">A sharper view of your <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent">trading desk.</span></h2>
                       <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">Ask about clients, positions, margin, deals, credits, or reports. The assistant uses your existing Broker Eye permissions and live data.</p>
+                      <div className="mt-4 flex flex-wrap gap-2 text-[11.5px] font-medium text-slate-600">
+                        {[['Live data', 'M3 12h4l2.5-6 4 12 2.5-6H21'], ['Your permissions', 'M12 3 4.5 6v5.5c0 4.6 3.1 8.3 7.5 9.5 4.4-1.2 7.5-4.9 7.5-9.5V6Z'], ['Every action audited', 'm5 12 5 5 9-10']].map(([label, d]) => <span key={label} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 shadow-sm"><svg className="h-3.5 w-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>{label}</span>)}
+                      </div>
                     </div>
                     {pins.length > 0 && <div className="mb-6"><AiPinnedHome pins={pins} onChange={setPins} onAsk={text => sendMessage(null, text)} /></div>}
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      {STARTERS.map(starter => <button key={starter.title} type="button" onClick={() => setDraft(starter.text)} className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"><p className="text-sm font-semibold text-slate-800">{starter.title}</p><p className="mt-2 text-xs leading-5 text-slate-500">{starter.text}</p></button>)}
+                    <p className="relative mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Try asking</p>
+                    <div className="relative grid gap-3 sm:grid-cols-3">
+                      {STARTERS.map(starter => <button key={starter.title} type="button" onClick={() => setDraft(starter.text)} className="group flex flex-col rounded-2xl border border-slate-200 bg-white/90 p-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-[0_12px_28px_-14px_rgba(37,99,235,0.45)]">
+                        <span className="flex items-center gap-2.5">
+                          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ring-1 ${starter.tint}`}><svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={starter.icon} /></svg></span>
+                          <span className="flex-1 text-sm font-semibold text-slate-800">{starter.title}</span>
+                          <svg className="h-4 w-4 -translate-x-1 text-blue-500 opacity-0 transition group-hover:translate-x-0 group-hover:opacity-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                        </span>
+                        <span className="mt-3 text-xs leading-5 text-slate-500">{starter.text}</span>
+                      </button>)}
                     </div>
                   </div>
                 ) : (
                   <div className="mx-auto min-w-0 max-w-5xl space-y-6">
-                    {messages.map((message, index) => (
+                    {messages.map((message, index) => {
+                      const speechKey = String(message.id ?? message.seq ?? index)
+                      return (
                       <MessageBubble
                         key={`${message.seq || index}-${index}`}
                         message={message}
                         isLast={index === messages.length - 1}
                         question={message.role === 'assistant' && messages[index - 1]?.role === 'user' ? stripQuote(messages[index - 1].text) : ''}
                         onFeedback={feedback}
-                        onConfirm={id => resolveAction(id, aiAPI.confirmAction)}
+                        onConfirm={(id, body) => resolveAction(id, aiAPI.confirmAction, body)}
                         onCancel={id => resolveAction(id, aiAPI.cancelAction)}
                         actionBusy={actionBusy}
                         onReply={setReplyTarget}
@@ -777,8 +843,10 @@ export default function AskAIPage() {
                         onEditResend={editAndResend}
                         onSave={saveQuestion}
                         onSchedule={scheduleQuestion}
+                        onSpeak={() => toggleReadAloud(message, speechKey)}
+                        isSpeaking={speakingKey === speechKey}
                       />
-                    ))}
+                    )})}
                   </div>
                 )}
                 {dragOver && <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center bg-blue-50/80"><p className="rounded-xl border-2 border-dashed border-blue-400 bg-white px-6 py-4 text-sm font-semibold text-blue-700">Drop to attach</p></div>}
@@ -796,25 +864,39 @@ export default function AskAIPage() {
                     <button type="button" onClick={() => setReplyTarget(null)} className="shrink-0 text-slate-400 hover:text-slate-700" aria-label="Cancel reply">✕</button>
                   </div>
                 )}
-                <form onSubmit={sendMessage} className="flex min-h-[52px] flex-col rounded-[20px] border border-blue-300 bg-white px-3 py-2 shadow-sm transition focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 sm:px-4">
+                <form onSubmit={sendMessage} className="relative flex min-h-[52px] flex-col rounded-[22px] border border-slate-200 bg-white px-3 py-2 transition focus-within:border-blue-400 sm:px-4">
                   <input ref={fileRef} type="file" accept="image/*,.csv,.xlsx,.xls,.xlsm,.tsv,.txt,.log" multiple onChange={onFileInputChange} className="hidden" />
                   {attachments.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{attachments.map(a => <div key={a.id} className={`flex max-w-full items-center gap-2 rounded-lg border py-1.5 pl-1.5 pr-2.5 text-xs ${a.pending ? 'border-slate-200 bg-slate-50 text-slate-500' : 'border-blue-100 bg-blue-50 text-blue-700'}`}>{a.isImage && a.previewUrl ? <img src={a.previewUrl} alt="" className={`h-7 w-7 shrink-0 rounded object-cover ${a.pending ? 'opacity-60' : ''}`} /> : <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white/70"><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 3v5h5M8 3h7l5 5v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg></span>}<span className="max-w-[180px] truncate font-medium">{a.filename}</span>{a.pending && <svg className="h-3.5 w-3.5 shrink-0 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" strokeOpacity=".35" strokeWidth="2" /><path d="M20 12a8 8 0 0 1-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>}<button type="button" onClick={() => removeAttachment(a.id)} aria-label="Remove attachment" className="shrink-0 font-semibold hover:text-blue-900">✕</button></div>)}</div>}
                   <div className="flex min-w-0 items-end gap-2">
-                    <button type="button" onClick={() => fileRef.current?.click()} disabled={attachments.length >= MAX_ATTACHMENTS} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 disabled:opacity-40" aria-label="Attach file" title="Attach file">
+                    <button type="button" onClick={() => fileRef.current?.click()} disabled={attachments.length >= MAX_ATTACHMENTS} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-blue-50 hover:text-blue-600 disabled:opacity-40" aria-label="Attach file" title="Attach file">
                       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
                     </button>
                     <textarea ref={composerRef} value={draft} onChange={event => setDraft(event.target.value)} onPaste={onComposerPaste} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(event) } else if (event.key === 'Escape' && sending) { event.preventDefault(); stopGenerating() } }} rows={1} placeholder="Ask Broker Eye" className="max-h-32 min-h-[30px] flex-1 resize-none border-0 bg-transparent px-1 py-1.5 text-[15px] leading-6 text-slate-800 outline-none placeholder:text-slate-400" />
+                    <AiMic
+                      disabled={sending}
+                      // ↑ sends the recording as a voice message (the AI reads its transcript); ■ puts the text in the box
+                      onVoice={(blob, transcript) => sendMessage(null, transcript, { voiceUrl: URL.createObjectURL(blob) })}
+                      onTranscript={transcript => {
+                        setDraft(current => `${current}${current.trim() ? ' ' : ''}${transcript}`)
+                        composerRef.current?.focus()
+                      }}
+                    />
                     {sending ? (
                       <button type="button" onClick={stopGenerating} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white shadow-sm transition hover:bg-slate-700" aria-label="Stop generating" title="Stop generating">
                         <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" /></svg>
                       </button>
                     ) : (
-                      <button type="submit" disabled={!draft.trim()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" aria-label="Send message" title="Send">
+                      <button type="submit" disabled={!draft.trim()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white transition hover:from-blue-700 hover:to-indigo-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-none disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none" aria-label="Send message" title="Send">
                         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
                     )}
                   </div>
                 </form>
+                {/* Disclaimer: AI answers can be wrong, so financial figures must be checked before acting on them */}
+                <p className="ask-ai-disclaimer mt-2 px-2 text-center text-[11px] leading-4 text-slate-500 sm:text-xs">
+                  <svg className="mr-1 inline-block h-3.5 w-3.5 align-[-3px] text-slate-400" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" /><path d="M12 11v5M12 8h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+                  Broker Eye AI can make mistakes. Please verify responses at your end before acting on them.
+                </p>
               </div>
             </div>
           </section>

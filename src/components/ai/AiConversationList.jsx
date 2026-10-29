@@ -42,9 +42,11 @@ function ConversationRow({ item, active, onSelect, onDelete }) {
   }, [menuOpen])
 
   return (
-    <div ref={ref} className={`group relative flex items-center gap-1 rounded-lg border px-2.5 py-2 transition ${active ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-sm' : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50'}`}>
-      <button type="button" onClick={() => onSelect(item.id)} className="min-w-0 flex-1 text-left">
-        <p className="truncate text-[11px] font-semibold leading-4">{item.title || 'Untitled conversation'}</p>
+    <div ref={ref} className={`group relative flex items-center gap-1 rounded-xl border px-2.5 py-2 transition ${active ? 'border-blue-200 bg-white text-blue-700 shadow-[0_2px_10px_-4px_rgba(37,99,235,0.35)]' : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-white hover:shadow-sm'}`}>
+      {active && <span aria-hidden="true" className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-gradient-to-b from-blue-500 to-indigo-500" />}
+      <button type="button" onClick={() => onSelect(item.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        <svg className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-blue-500' : 'text-slate-400 group-hover:text-slate-500'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.8 7L4 20l1.2-4.6A8 8 0 1 1 21 12Z" /></svg>
+        <p className="truncate text-[12px] font-medium leading-4">{item.title || 'Untitled conversation'}</p>
       </button>
       <button
         type="button"
@@ -107,7 +109,7 @@ const AiConversationList = ({ conversations, saved = [], activeId, searchActive,
     <div className="space-y-3">
       {saved.length > 0 && (
         <div>
-          <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Saved questions</p>
+          <p className="mb-1.5 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-amber-600">Saved questions<span className="h-px flex-1 bg-amber-200/70" /></p>
           <div className="space-y-1">
             {saved.map(item => <SavedRow key={item.id} item={item} onAsk={onAskSaved} onDelete={onDeleteSaved} />)}
           </div>
@@ -115,7 +117,7 @@ const AiConversationList = ({ conversations, saved = [], activeId, searchActive,
       )}
       {groups.map(group => (
         <div key={group.name}>
-          <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{group.name}</p>
+          <p className="mb-1.5 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{group.name}<span className="h-px flex-1 bg-slate-200/70" /></p>
           <div className="space-y-1">
             {group.items.map(item => (
               <ConversationRow key={item.id} item={item} active={item.id === activeId} onSelect={onSelect} onDelete={onDelete} />

@@ -191,7 +191,7 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.35)',
+          background: 'rgba(15, 23, 42, 0.45)',
           zIndex: 9998,
         }}
         onClick={handleClose}
@@ -210,6 +210,9 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
           height: 'auto',
           maxHeight: '85vh',
           background: '#FFFFFF',
+          borderRadius: '28px 28px 0 0',
+          boxShadow: '0 -8px 30px rgba(15, 23, 42, 0.12)',
+          overflow: 'hidden',
           zIndex: 9999,
           display: 'flex',
           flexDirection: 'column',
@@ -219,9 +222,9 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
         {/* Top indicator */}
         <div
           style={{
-            width: '47px',
-            height: '2px',
-            background: 'rgba(71, 84, 103, 0.55)',
+            width: '40px',
+            height: '4px',
+            background: '#CBD5E1',
             borderRadius: '2px',
             margin: '10px auto',
           }}
@@ -243,10 +246,16 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
               if (onBack) onBack()
             }}
             style={{
-              background: 'none',
-              border: 'none',
+              background: 'transparent',
+              border: '1px solid #D5DEEA',
+              borderRadius: '12px',
               cursor: 'pointer',
-              padding: '5px',
+              width: '36px',
+              height: '36px',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
             <svg width="8" height="14" viewBox="0 0 8 14" fill="none" style={{ transform: 'rotate(180deg)' }}>
@@ -257,21 +266,22 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
           <h2
             style={{
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 600,
+              fontWeight: 800,
               fontSize: '18px',
               lineHeight: '24px',
-              color: '#4B4B4B',
+              color: '#0F172A',
+              letterSpacing: '-0.02em',
               margin: 0,
             }}
           >
             {editGroup ? 'Edit Login Group' : 'Login Groups'}
           </h2>
 
-          <div style={{ width: '18px' }} />
+          <div style={{ width: '36px' }} />
         </div>
 
         {/* Divider */}
-        <div style={{ width: '100%', height: '1px', background: '#F2F2F7', marginBottom: '16px' }} />
+        <div style={{ width: '100%', height: '1px', background: '#D5DEEA', marginBottom: '16px' }} />
 
         {/* Content - Scrollable */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px' }}>
@@ -288,8 +298,8 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
               style={{
                 width: '100%',
                 padding: '12px 45px 12px 16px',
-                background: '#FFFFFF',
-                border: '1px solid #E6EEF8',
+                background: 'transparent',
+                border: '1px solid #D5DEEA',
                 borderRadius: '12px',
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: '14px',
@@ -321,9 +331,9 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
               style={{
                 flex: 1,
                 padding: '10px',
-                background: activeTab === 'myLogin' ? '#2563EB' : '#FFFFFF',
+                background: activeTab === 'myLogin' ? '#2563EB' : 'transparent',
                 color: activeTab === 'myLogin' ? '#FFFFFF' : '#999999',
-                border: activeTab === 'myLogin' ? 'none' : '1px solid #E6EEF8',
+                border: activeTab === 'myLogin' ? 'none' : '1px solid #D5DEEA',
                 borderRadius: '20px',
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: '14px',
@@ -339,9 +349,9 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
               style={{
                 flex: 1,
                 padding: '10px',
-                background: activeTab === 'range' ? '#2563EB' : '#FFFFFF',
+                background: activeTab === 'range' ? '#2563EB' : 'transparent',
                 color: activeTab === 'range' ? '#FFFFFF' : '#999999',
-                border: activeTab === 'range' ? 'none' : '1px solid #E6EEF8',
+                border: activeTab === 'range' ? 'none' : '1px solid #D5DEEA',
                 borderRadius: '20px',
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: '14px',
@@ -380,8 +390,8 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
                   style={{
                     width: '100%',
                     padding: '12px 45px 12px 16px',
-                    background: '#FFFFFF',
-                    border: '1px solid #E6EEF8',
+                    background: 'transparent',
+                    border: '1px solid #D5DEEA',
                     borderRadius: '12px',
                     fontFamily: 'Outfit, sans-serif',
                     fontSize: '14px',
@@ -439,8 +449,8 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
                             width: '20px',
                             height: '20px',
                             borderRadius: '4px',
-                            border: isSelected ? '2px solid #2563EB' : '2px solid #E6EEF8',
-                            background: isSelected ? '#2563EB' : '#FFFFFF',
+                            border: isSelected ? '2px solid #2563EB' : '2px solid #D5DEEA',
+                            background: isSelected ? '#2563EB' : 'transparent',
                             marginRight: '12px',
                             display: 'flex',
                             alignItems: 'center',
@@ -571,8 +581,8 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
                     style={{
                       width: '100%',
                       padding: '10px 12px',
-                      background: '#FFFFFF',
-                      border: '1px solid #E6EEF8',
+                      background: 'transparent',
+                      border: '1px solid #D5DEEA',
                       borderRadius: '12px',
                       fontFamily: 'Outfit, sans-serif',
                       fontSize: '14px',
@@ -603,8 +613,8 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
                     style={{
                       width: '100%',
                       padding: '10px 12px',
-                      background: '#FFFFFF',
-                      border: '1px solid #E6EEF8',
+                      background: 'transparent',
+                      border: '1px solid #D5DEEA',
                       borderRadius: '12px',
                       fontFamily: 'Outfit, sans-serif',
                       fontSize: '14px',
@@ -637,8 +647,8 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
 
         {/* Footer Buttons */}
         <div style={{
-          padding: '16px 20px',
-          borderTop: '1px solid #F2F2F7',
+          padding: '14px 20px calc(16px + env(safe-area-inset-bottom, 0px))',
+          borderTop: '1px solid #D5DEEA',
           display: 'flex',
           gap: '10px',
         }}>
@@ -647,8 +657,8 @@ const LoginGroupModal = ({ isOpen, onClose, onSave, onBack, editGroup = null }) 
             style={{
               flex: 1,
               padding: '12px',
-              background: '#FFFFFF',
-              border: '1px solid #E6EEF8',
+              background: 'transparent',
+              border: '1px solid #D5DEEA',
               borderRadius: '12px',
               fontFamily: 'Outfit, sans-serif',
               fontWeight: 500,

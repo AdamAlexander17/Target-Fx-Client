@@ -1,5 +1,6 @@
-import { drawerTapGuard } from '../utils/drawerTapGuard'
+import Sidebar from './Sidebar'
 import BrokerCreditSummary from './BrokerCreditSummary'
+import MobileBottomNav from './MobileBottomNav'
 import { withExportLoading } from '../utils/exportLoading'
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { AskAiIcon, ReportsIcon, ReportSubIcon, TutorialIcon, BrokerageCalcIcon } from './ReportIcons'
@@ -18,9 +19,8 @@ import ColumnChooserList from './ColumnChooserList'
 import AutoPercentageModal from './AutoPercentageModal'
 import { useGroups } from '../contexts/groupContextStore'
 import { applyCumulativeFilters } from '../utils/mobileFilters'
-import { getPercentageType, filterPercentageTypes, percentageSearchType, loadPercentageClients } from '../utils/percentageType'
+import { getPercentageType, filterPercentageTypes, percentageSearchType, loadPercentageClients, PERCENTAGE_TYPES } from '../utils/percentageType'
 import { createLatestRequest } from '../utils/latestRequest'
-import PercentageTypeFilter from './PercentageTypeFilter'
 import { formatDate } from '../utils/dateFormatter'
 
 
@@ -38,12 +38,11 @@ const formatCompactIndian = (v) => {
 
 export default function ClientPercentageModule() {
   const navigate = useNavigate()
-  const { logout, user } = useAuth()
+  const { user } = useAuth()
   const canSetPercentage = user?.rights ? user.rights.includes('set_percentage') : true
   const { positions: cachedPositions, clients: cachedClients, rawClients, orders } = useData()
   const { groups, deleteGroup, getActiveGroupFilter, setActiveGroupFilter, filterByActiveGroup, activeGroupFilters } = useGroups()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [mobileReportsOpen, setMobileReportsOpen] = useState(false)
   const [numericMode, setNumericMode] = useState(() => { try { const s = localStorage.getItem('globalDisplayMode'); return s === 'full' ? 'full' : 'compact' } catch { return 'compact' } })
 
   const [searchInput, setSearchInput] = useState('')
@@ -64,6 +63,7 @@ export default function ClientPercentageModule() {
   const [selectedClientForDetails, setSelectedClientForDetails] = useState(null)
   const carouselRef = useRef(null)
   const [isColumnSelectorOpen, setIsColumnSelectorOpen] = useState(false)
+  const [isTypeSheetOpen, setIsTypeSheetOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const serverPage = useLocalTypeFiltering ? 1 : currentPage
   const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768)
@@ -828,7 +828,7 @@ export default function ClientPercentageModule() {
   }, [showExportMenu])
 
   return (
-    <div className="app-viewport-panel flex flex-col bg-[#F5F7FA] overflow-hidden">
+    <div className="app-viewport-panel flex flex-col bg-white overflow-hidden">
       {/* Error Message */}
       {error && (
         <div className="fixed top-4 right-4 bg-red-50 border-l-4 border-red-500 rounded-r p-4 shadow-lg z-50 max-w-md">
@@ -843,17 +843,23 @@ export default function ClientPercentageModule() {
       )}
 
       {/* Sticky Header */}
-      <div className="flex-shrink-0 bg-white border-b border-[#E5E7EB] px-5 py-3">
-        <div className="flex items-center relative">
+      <div className="flex-shrink-0 bg-transparent px-4 pt-4 pb-2">
+        <div className="flex items-center gap-3 relative">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded-lg transition-colors"
+            className="w-12 h-12 flex-shrink-0 rounded-2xl bg-transparent border border-[#D5DEEA] flex items-center justify-center"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M3 12h18M3 6h18M3 18h18" stroke="#1F2937" strokeWidth="2" strokeLinecap="round"/>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round"/>
             </svg>
           </button>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="transform max-w-[62vw] sm:max-w-none truncate whitespace-nowrap text-lg sm:text-xl font-bold text-[#1F2937] min-w-0 max-sm:text-sm">Client Percentage</h1><BrokerCreditSummary variant="header" /></div>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-[22px] leading-7 font-extrabold tracking-tight text-[#0F172A] truncate">Client Percentage</h1>
+              <p className="text-[12px] text-[#64748B] truncate">Manage client percentage settings</p>
+            </div>
+            <BrokerCreditSummary variant="header" />
+          </div>
           {!isMobileView && (
             <button 
               onClick={() => navigate('/client2')}
@@ -871,154 +877,11 @@ export default function ClientPercentageModule() {
 
       {/* Scrollable Content Area */}
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-        {/* Action Buttons + View All */}
-        <div className="px-5 pt-3 pb-2">
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <div className="scrollbar-hide flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto">
-              <PercentageTypeFilter selectedTypes={selectedTypes} onChange={types => {
-                setSelectedTypes(types)
-                setCurrentPage(1)
-                setSelectedRows(new Set())
-              }} />
-              {!isMobileView && (
-                <button 
-                  onClick={() => {
-                    setIsCustomizeOpen(true)
-                  }} 
-                  className={`h-8 px-3 rounded-[12px] border shadow-sm flex items-center justify-center gap-2 transition-all relative ${
-                    (filters.hasFloating || filters.hasCredit || filters.noDeposit || getActiveGroupFilter('clientpercentage'))
-                      ? 'bg-blue-50 border-blue-200' 
-                      : 'bg-white border-[#E5E7EB] hover:bg-gray-50'
-                  }`}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M4.5 6.5H9.5M2.5 3.5H11.5M5.5 9.5H8.5" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                  <span className="text-[#4B4B4B] text-[10px] font-medium font-outfit">Filters</span>
-                  {(() => {
-                    const filterCount = [
-                      filters.hasFloating,
-                      filters.hasCredit,
-                      filters.noDeposit,
-                      getActiveGroupFilter('clientpercentage')
-                    ].filter(Boolean).length;
-                    return filterCount > 0 ? (
-                      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                        {filterCount}
-                      </span>
-                    ) : null;
-                  })()}
-                </button>
-              )}
-              {!isMobileView && (
-                <button 
-                  onClick={handleExportToCSV}
-                  className="h-8 w-8 rounded-lg bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors"
-                  title="Export to CSV"
-                >
-                  <svg className="w-4 h-4 text-[#374151]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-3-3m3 3l3-3M4 20h16"/>
-                  </svg>
-                </button>
-              )}
-              {/* Auto Percentage Button */}
-              {canSetPercentage && (
-              <button
-                onClick={() => setShowAutoPercentageModal(true)}
-                className="h-8 px-2 rounded-lg bg-white border border-[#E5E7EB] shadow-sm flex shrink-0 items-center gap-1 hover:bg-gray-50 transition-colors text-[10px] font-medium text-[#374151]"
-                title="Auto Percentage Ranges"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Auto %
-              </button>
-              )}
-              {/* Import CSV Button */}
-              {canSetPercentage && (
-              <button
-                onClick={() => { setCsvData([]); setCsvError(''); if (csvFileRef.current) csvFileRef.current.value = ''; setShowImportModal(true) }}
-                className="h-8 px-2 rounded-lg bg-white border border-[#E5E7EB] shadow-sm flex shrink-0 items-center gap-1 hover:bg-gray-50 transition-colors text-[10px] font-medium text-[#374151]"
-                title="Import CSV"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                Import
-              </button>
-              )}
-              <div className="flex shrink-0 items-center gap-1.5">
-              {/* Export Button with dropdown */}
-              <div className="relative shrink-0" ref={exportMenuRef}>
-                <button
-                  onClick={() => setShowExportMenu(v => !v)}
-                  disabled={exporting}
-                  className="h-8 px-2 rounded-lg bg-white border border-[#E5E7EB] shadow-sm flex shrink-0 items-center gap-1 hover:bg-gray-50 transition-colors text-[10px] font-medium text-[#374151] disabled:opacity-60"
-                  title="Export"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-3-3m3 3l3-3M4 20h16" />
-                  </svg>
-                  {exporting ? `${Math.round((exportProgress || 0) * 100)}%` : 'Export'}
-                  {!exporting && <svg className="w-2.5 h-2.5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>}
-                </button>
-                {showExportMenu && !exporting && (
-                  <div className="absolute left-0 mt-1 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
-                    <button
-                      onClick={() => { setShowExportMenu(false); handleExport('all') }}
-                      className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center justify-between"
-                    >
-                      <span>Download All</span>
-                      <span className="text-[10px] text-gray-400">{useLocalTypeFiltering ? filteredData.length : stats.total || ''}</span>
-                    </button>
-                    <button
-                      onClick={() => { setShowExportMenu(false); handleExport('selected') }}
-                      disabled={selectedRows.size === 0}
-                      className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between"
-                    >
-                      <span>Download Selected</span>
-                      <span className="text-[10px] text-gray-400">{selectedRows.size}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => window.location.reload()}
-                disabled={loading}
-                className="w-8 h-8 rounded-lg border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-all flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="#4B4B4B"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-              </div>
-            </div>
-            {/* Bulk Update button — visible when rows are selected */}
-            {selectedRows.size > 0 && (
-              <button
-                onClick={() => { setBulkPercentage(''); setBulkComment(''); setShowBulkModal(true) }}
-                className="h-8 px-3 rounded-lg bg-blue-600 text-white border border-blue-600 shadow-sm flex items-center gap-1 hover:bg-blue-700 transition-colors text-[10px] font-semibold flex-shrink-0"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Bulk Update ({selectedRows.size})
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* Face Cards Carousel */}
-        <div className="pb-2 pl-5">
+        <div className="pt-3 pb-1 pl-4">
           <div 
             ref={carouselRef}
-            className="flex gap-[8px] overflow-x-auto scrollbar-hide snap-x snap-mandatory pr-4"
+            className="flex gap-[10px] overflow-x-auto scrollbar-hide snap-x snap-mandatory pr-4 pb-2"
           >
             {cards.map((card, i) => (
               <div 
@@ -1044,14 +907,14 @@ export default function ClientPercentageModule() {
                 }}
                 style={{
                   boxSizing: 'border-box',
-                  minWidth: '125px',
-                  width: '125px',
-                  height: '60px',
-                  background: '#FFFFFF',
-                  border: '1px solid #F2F2F7',
-                  boxShadow: '0px 0px 12px rgba(75, 75, 75, 0.05)',
-                  borderRadius: '12px',
-                  padding: '8px',
+                  minWidth: '132px',
+                  width: '132px',
+                  height: '72px',
+                  background: 'transparent',
+                  border: '1px solid #D5DEEA',
+                  boxShadow: 'none',
+                  borderRadius: '14px',
+                  padding: '10px',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
@@ -1064,18 +927,21 @@ export default function ClientPercentageModule() {
                   touchAction: 'pan-x'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', pointerEvents: 'none' }}>
-                  <span style={{ color: '#4B4B4B', fontSize: '9px', fontWeight: 600, lineHeight: '12px', paddingRight: '4px' }}>{card.label}</span>
-                  <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', pointerEvents: 'none' }}>
+                  <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '5px' }}>
                     <img src={getCardIcon(card.label)} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(0) saturate(100%) invert(27%) sepia(97%) saturate(1500%) hue-rotate(213deg) brightness(100%)' }} onError={(e) => { e.target.style.display = 'none' }} />
                   </div>
+                  <span style={{ color: '#334155', fontSize: '11px', fontWeight: 500, lineHeight: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.label}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minHeight: '16px', pointerEvents: 'none' }}>
                   <span style={{
-                    fontSize: '13px',
+                    fontSize: '14px',
                     fontWeight: 700,
-                    lineHeight: '14px',
+                    lineHeight: '18px',
                     letterSpacing: '-0.01em',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
                     color: card.numericValue > 0 ? '#16A34A' : card.numericValue < 0 ? '#DC2626' : '#000000'
                   }}>
                     {card.value === '' || card.value === undefined ? '0.00' : card.value}
@@ -1086,24 +952,179 @@ export default function ClientPercentageModule() {
           </div>
         </div>
 
+        {/* Action Buttons + View All */}
+        <div className="px-3 pt-1 pb-1">
+          <div className="flex flex-col gap-2 mb-3">
+            <div className="scrollbar-hide flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto">
+              {/* Type filter opens a bottom sheet: a dropdown would be clipped by this horizontally scrolling row */}
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={isTypeSheetOpen}
+                onClick={() => setIsTypeSheetOpen(true)}
+                className={`h-9 px-3 rounded-xl border flex shrink-0 items-center gap-1.5 text-[11px] font-medium transition-colors ${
+                  selectedTypes.length ? 'bg-blue-50 border-blue-200 text-[#2563EB]' : 'bg-transparent border-[#D5DEEA] text-[#1F2937] hover:bg-white/60'
+                }`}
+              >
+                Type
+                {selectedTypes.length > 0 && <span className="min-w-[18px] h-[18px] rounded-full bg-[#2563EB] text-white text-[10px] font-bold flex items-center justify-center px-1">{selectedTypes.length}</span>}
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {!isMobileView && (
+                <button 
+                  onClick={() => {
+                    setIsCustomizeOpen(true)
+                  }} 
+                  className={`h-9 px-3 rounded-xl border flex items-center justify-center gap-1.5 transition-all relative ${
+                    (filters.hasFloating || filters.hasCredit || filters.noDeposit || getActiveGroupFilter('clientpercentage'))
+                      ? 'bg-blue-50 border-blue-200' 
+                      : 'bg-transparent border-[#D5DEEA] hover:bg-white/60'
+                  }`}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M4.5 6.5H9.5M2.5 3.5H11.5M5.5 9.5H8.5" stroke="#4B4B4B" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <span className="text-[#4B4B4B] text-[10px] font-medium font-outfit">Filters</span>
+                  {(() => {
+                    const filterCount = [
+                      filters.hasFloating,
+                      filters.hasCredit,
+                      filters.noDeposit,
+                      getActiveGroupFilter('clientpercentage')
+                    ].filter(Boolean).length;
+                    return filterCount > 0 ? (
+                      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                        {filterCount}
+                      </span>
+                    ) : null;
+                  })()}
+                </button>
+              )}
+              {!isMobileView && (
+                <button 
+                  onClick={handleExportToCSV}
+                  className="h-9 w-9 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors"
+                  title="Export to CSV"
+                >
+                  <svg className="w-4 h-4 text-[#374151]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-3-3m3 3l3-3M4 20h16"/>
+                  </svg>
+                </button>
+              )}
+              {/* Auto Percentage Button */}
+              {canSetPercentage && (
+              <button
+                onClick={() => setShowAutoPercentageModal(true)}
+                className="h-9 px-2.5 rounded-xl bg-transparent border border-[#D5DEEA] flex shrink-0 items-center gap-1 hover:bg-white/60 transition-colors text-[11px] font-medium text-[#1F2937]"
+                title="Auto Percentage Ranges"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Auto %
+              </button>
+              )}
+              {/* Import CSV Button */}
+              {canSetPercentage && (
+              <button
+                onClick={() => { setCsvData([]); setCsvError(''); if (csvFileRef.current) csvFileRef.current.value = ''; setShowImportModal(true) }}
+                className="h-9 px-2.5 rounded-xl bg-transparent border border-[#D5DEEA] flex shrink-0 items-center gap-1 hover:bg-white/60 transition-colors text-[11px] font-medium text-[#1F2937]"
+                title="Import CSV"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Import
+              </button>
+              )}
+              <div className="flex shrink-0 items-center gap-1.5">
+              {/* Export Button with dropdown */}
+              <div className="relative shrink-0" ref={exportMenuRef}>
+                <button
+                  onClick={() => setShowExportMenu(v => !v)}
+                  disabled={exporting}
+                  className="h-9 px-2.5 rounded-xl bg-transparent border border-[#D5DEEA] flex shrink-0 items-center gap-1 hover:bg-white/60 transition-colors text-[11px] font-medium text-[#1F2937] disabled:opacity-60"
+                  title="Export"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-3-3m3 3l3-3M4 20h16" />
+                  </svg>
+                  {exporting ? `${Math.round((exportProgress || 0) * 100)}%` : 'Export'}
+                  {!exporting && <svg className="w-2.5 h-2.5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>}
+                </button>
+                {showExportMenu && !exporting && (
+                  <div className="absolute left-0 mt-1.5 w-48 bg-white border border-[#D5DEEA] rounded-2xl shadow-[0_10px_30px_rgba(15,23,42,0.14)] z-50 p-1.5">
+                    <button
+                      onClick={() => { setShowExportMenu(false); handleExport('all') }}
+                      className="w-full text-left px-2.5 h-9 rounded-xl text-[13px] text-[#1F2937] hover:bg-white/70 flex items-center justify-between"
+                    >
+                      <span>Download All</span>
+                      <span className="text-[10px] text-gray-400">{useLocalTypeFiltering ? filteredData.length : stats.total || ''}</span>
+                    </button>
+                    <button
+                      onClick={() => { setShowExportMenu(false); handleExport('selected') }}
+                      disabled={selectedRows.size === 0}
+                      className="w-full text-left px-2.5 h-9 rounded-xl text-[13px] text-[#1F2937] hover:bg-white/70 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between"
+                    >
+                      <span>Download Selected</span>
+                      <span className="text-[10px] text-gray-400">{selectedRows.size}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => window.location.reload()}
+                disabled={loading}
+                className="w-9 h-9 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-all flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="#4B4B4B"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+              </div>
+            </div>
+            {/* Bulk Update button — visible when rows are selected */}
+            {selectedRows.size > 0 && (
+              <button
+                onClick={() => { setBulkPercentage(''); setBulkComment(''); setShowBulkModal(true) }}
+                className="h-10 w-full px-3 rounded-xl bg-[#2563EB] text-white border border-[#2563EB] shadow-[0_4px_10px_rgba(37,99,235,0.3)] flex items-center justify-center gap-1.5 hover:bg-blue-700 transition-colors text-[13px] font-semibold"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Bulk Update ({selectedRows.size})
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Search and Pagination Controls */}
-        <div className="mx-1 sm:mx-4 mb-1 px-3 py-3 sm:p-4">
-          <div className="flex items-center gap-1 sm:gap-2">
-            <div className="flex-1 min-w-0 h-7 sm:h-10 bg-[#F9FAFB] border border-[#E5E7EB] rounded-md px-2 sm:px-3 flex items-center gap-1.5">
-              <svg width="12" height="12" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]">
+        <div className="mx-4 mb-3">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="flex-1 min-w-0 h-10 bg-transparent border border-[#D5DEEA] rounded-xl px-3 flex items-center gap-2">
+              <svg width="15" height="15" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]">
                 <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
                 <path d="M13 13L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              <input 
-                placeholder="Search"
+              <input
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')} 
+                placeholder="Search by login..."
                 value={searchInput}
                 onChange={(e) => { setSearchInput(e.target.value); setCurrentPage(1) }}
-                className="flex-1 min-w-0 text-[11px] sm:text-sm text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit focus:ring-0"
+                className="flex-1 min-w-0 text-[13px] sm:text-sm text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit focus:ring-0"
               />
             </div>
             <button 
               onClick={() => setIsColumnSelectorOpen(true)}
-              className="h-7 w-7 sm:h-10 sm:w-10 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors"
+              className="h-10 w-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors"
               title="Show/Hide Columns">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                 <rect x="2" y="3" width="4" height="10" rx="1" stroke="#4B5563" strokeWidth="1.2"/>
@@ -1113,7 +1134,7 @@ export default function ClientPercentageModule() {
             <button 
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
-              className="h-7 w-7 sm:h-10 sm:w-10 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-10 w-9 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
                 <path d="M12 14L8 10L12 6" stroke="#4B5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1121,7 +1142,7 @@ export default function ClientPercentageModule() {
             </button>
 
             {/* Page indicator */}
-            <div className="px-1 text-[11px] font-medium text-[#374151] flex items-center gap-1">
+            <div className="text-[13px] font-medium text-[#475569] flex items-center gap-1">
               <input
                 type="number"
                 min={1}
@@ -1131,7 +1152,7 @@ export default function ClientPercentageModule() {
                   const n = Number(e.target.value)
                   if (!isNaN(n)) setCurrentPage(Math.min(Math.max(1, n), totalPages))
                 }}
-                className="w-10 h-7 border border-[#E5E7EB] rounded-lg text-center text-[11px] font-semibold text-[#1F2937]"
+                className="w-10 h-10 bg-[#2563EB] text-white font-semibold border border-[#2563EB] rounded-xl text-center text-[13px] shadow-[0_4px_10px_rgba(37,99,235,0.3)] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 aria-label="Current page"
               />
               <span className="text-[#9CA3AF]">/</span>
@@ -1141,7 +1162,7 @@ export default function ClientPercentageModule() {
             <button 
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage >= totalPages}
-              className="h-7 w-7 sm:h-10 sm:w-10 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-10 w-9 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
                 <path d="M8 6L12 10L8 14" stroke="#4B5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1152,7 +1173,7 @@ export default function ClientPercentageModule() {
 
         {/* Table */}
         <div className="flex-1 min-h-[180px] overflow-hidden" style={{ maxWidth: '100vw' }}>
-          <div className="bg-white shadow-[0_0_12px_rgba(75,75,75,0.05)] h-full">
+          <div className="bg-transparent border border-blue-100 max-md:border-b-0 h-full">
             <div className="mobile-table-scroll h-full w-full overflow-x-auto overflow-y-auto scrollbar-hide" style={{
               WebkitOverflowScrolling: 'touch',
               scrollbarWidth: 'none',
@@ -1214,7 +1235,7 @@ export default function ClientPercentageModule() {
                     {[...Array(8)].map((_, idx) => (
                       <div data-mobile-data-row="body" 
                         key={idx}
-                        className="grid text-[10px] bg-white border-b border-[#E1E1E1]"
+                        className="grid text-[10px] bg-transparent border-b border-[#E1E1E1]"
                         style={{
                           gap: '0px', 
                           gridGap: '0px', 
@@ -1251,7 +1272,7 @@ export default function ClientPercentageModule() {
                       return (
                       <div data-mobile-data-row="body" 
                         key={idx} 
-                        className={`grid text-[10px] text-[#4B4B4B] font-outfit border-b border-[#E1E1E1] transition-colors ${isSelected ? 'bg-blue-50' : 'bg-white hover:bg-[#F8FAFC]'}`}
+                        className={`grid text-[10px] text-[#4B4B4B] font-outfit border-b border-[#E1E1E1] transition-colors ${isSelected ? 'bg-blue-50' : 'bg-transparent hover:bg-white/50'}`}
                         style={{
                           gap: '0px', 
                           gridGap: '0px', 
@@ -1260,7 +1281,7 @@ export default function ClientPercentageModule() {
                         }}
                       >
                         {/* Row checkbox */}
-                        <div className="h-[38px] flex items-center justify-center sticky left-0 z-10" style={{ background: isSelected ? '#EFF6FF' : 'white' }}>
+                        <div className="h-[38px] flex items-center justify-center sticky left-0 z-10" style={{ background: isSelected ? '#EFF6FF' : '#FFFFFF' }}>
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -1293,6 +1314,9 @@ export default function ClientPercentageModule() {
           </div>
         </div>
       </div>
+
+      {/* Bottom Navigation */}
+      <MobileBottomNav onMore={() => setIsSidebarOpen(true)} />
 
       {/* Auto Percentage Modal */}
       <AutoPercentageModal
@@ -1542,27 +1566,101 @@ export default function ClientPercentageModule() {
         editGroup={editingGroup}
       />
 
+      {/* Type Filter Sheet — same behaviour as the desktop Type dropdown: changes apply immediately, none checked shows all */}
+      {isTypeSheetOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end" onClick={() => setIsTypeSheetOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="percentage-type-title"
+            className="bg-white w-full rounded-t-[28px] flex flex-col overflow-hidden shadow-[0_-8px_30px_rgba(15,23,42,0.12)]"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="pt-2.5 flex justify-center flex-shrink-0"><span className="w-10 h-1 rounded-full bg-[#CBD5E1]" /></div>
+            <div className="px-5 pt-3 pb-3 border-b border-[#D5DEEA] flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 id="percentage-type-title" className="text-[18px] leading-6 font-extrabold tracking-tight text-[#0F172A]">Type</h3>
+                <p className="text-[12px] text-[#64748B]">Unchecked shows all types</p>
+              </div>
+              <button aria-label="Close type filter" onClick={() => setIsTypeSheetOpen(false)} className="w-10 h-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="#0F172A" strokeWidth="2" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <fieldset className="px-5 pt-4 pb-2">
+              <legend className="sr-only">Filter by percentage type</legend>
+              {PERCENTAGE_TYPES.map(type => {
+                const checked = selectedTypes.includes(type)
+                return (
+                  <label key={type} className={`flex items-center gap-3 px-3.5 py-3 mb-2.5 rounded-2xl border cursor-pointer transition-colors ${checked ? 'border-[#2563EB] bg-[#2563EB]/[0.08]' : 'border-[#D5DEEA] bg-transparent'}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={event => {
+                        setSelectedTypes(event.target.checked ? [...selectedTypes, type] : selectedTypes.filter(value => value !== type))
+                        setCurrentPage(1)
+                        setSelectedRows(new Set())
+                      }}
+                      className="w-[18px] h-[18px] rounded accent-[#2563EB] cursor-pointer"
+                    />
+                    <span className={`text-[15px] ${checked ? 'font-semibold text-[#2563EB]' : 'font-medium text-[#0F172A]'}`}>{type}</span>
+                  </label>
+                )
+              })}
+            </fieldset>
+            <div className="flex gap-3 px-5 pt-2 pb-5">
+              <button
+                type="button"
+                onClick={() => { setSelectedTypes([]); setCurrentPage(1); setSelectedRows(new Set()) }}
+                className="flex-1 h-11 rounded-[14px] border border-[#D5DEEA] bg-transparent text-[14px] font-semibold text-[#334155]"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsTypeSheetOpen(false)}
+                className="flex-1 h-11 rounded-[14px] bg-[#2563EB] text-[14px] font-semibold text-white shadow-[0_4px_10px_rgba(37,99,235,0.3)]"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Column Selector Modal */}
       {isColumnSelectorOpen && (
-        <div className="app-sheet-overlay fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setIsColumnSelectorOpen(false)}>
+        <div className="app-sheet-overlay fixed inset-0 bg-black/40 z-50 flex items-end" onClick={() => setIsColumnSelectorOpen(false)}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="percentage-column-title"
-            className="app-sheet bg-white w-full rounded-t-[24px] flex flex-col overflow-hidden"
+            className="app-sheet bg-white w-full rounded-t-[28px] flex flex-col overflow-hidden shadow-[0_-8px_30px_rgba(15,23,42,0.12)]"
             style={{ maxHeight: '85dvh' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between flex-shrink-0">
-              <h3 id="percentage-column-title" className="text-base font-semibold text-[#000000]">Show/Hide & Reorder Columns</h3>
-              <button aria-label="Close column selector" className="flex h-11 w-11 items-center justify-center" onClick={() => setIsColumnSelectorOpen(false)}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="#404040" strokeWidth="2"/>
+            {/* Scoped restyle of the shared ColumnChooserList to match the mobile theme */}
+            <style>{`
+              .c2-col-chooser > div > div { border-color: #D5DEEA !important; }
+              .c2-col-chooser input[type="text"] { background: transparent !important; border-color: #D5DEEA !important; border-radius: 12px !important; height: 40px; font-size: 13px !important; }
+              .c2-col-chooser input[type="checkbox"] { width: 16px !important; height: 16px !important; accent-color: #2563EB; border-radius: 4px; }
+              .c2-col-chooser .overscroll-contain > [data-col-key] { padding-top: 10px; padding-bottom: 10px; margin-left: 12px; margin-right: 12px; border-radius: 0; border-bottom: 1px solid rgba(213, 222, 234, 0.6); }
+              .c2-col-chooser .overscroll-contain > [data-col-key] label span { font-size: 13px !important; color: #1F2937 !important; }
+            `}</style>
+            <div className="pt-2.5 flex justify-center flex-shrink-0"><span className="w-10 h-1 rounded-full bg-[#CBD5E1]" /></div>
+            <div className="px-5 pt-3 pb-3 border-b border-[#D5DEEA] flex items-center justify-between gap-3 flex-shrink-0">
+              <div className="min-w-0">
+                <h3 id="percentage-column-title" className="text-[18px] leading-6 font-extrabold tracking-tight text-[#0F172A] truncate">Columns</h3>
+                <p className="text-[12px] text-[#64748B] truncate">Show, hide, pin & reorder columns</p>
+              </div>
+              <button aria-label="Close column selector" onClick={() => setIsColumnSelectorOpen(false)} className="w-10 h-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="#0F172A" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 flex flex-col">
+            <div className="c2-col-chooser flex-1 min-h-0 flex flex-col">
               <ColumnChooserList
                 columns={allColumns.map(({ key, label }) => ({ key, label }))}
                 visibleColumns={visibleColumns}
@@ -1582,126 +1680,8 @@ export default function ClientPercentageModule() {
       )}
 
       {/* Sidebar */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 z-30">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/10"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-          {/* Drawer */}
-          <div className="absolute left-0 top-0 h-full w-[300px] bg-white shadow-xl rounded-r-2xl flex flex-col">
-            <div className="p-4 flex items-center gap-3 border-b border-[#ECECEC]">
-              <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#1A63BC"/></svg>
-              </div>
-              <div className="flex-1">
-                <div className="text-[14px] font-semibold text-[#1A63BC]">Broker Eye</div>
-                <div className="text-[11px] text-[#7A7A7A]">Financial Dashboard</div>
-              </div>
-              <button onClick={() => setIsSidebarOpen(false)} className="w-8 h-8 rounded-lg bg-[#F5F5F5] flex items-center justify-center">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#404040" strokeWidth="2" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-auto py-2" {...drawerTapGuard}>
-              {/* Compact / Full display mode toggle */}
-              <div className="px-3 pb-3 pt-1">
-                <p className="text-[9px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1.5 px-1">Display Mode</p>
-                <div className="flex items-center bg-[#F3F4F6] p-0.5 w-full rounded">
-                  <button type="button" onClick={() => { setNumericMode('compact'); try { localStorage.setItem('globalDisplayMode','compact') } catch { /* Retain the fallback when this operation is unavailable. */ } try { window.dispatchEvent(new CustomEvent('globalDisplayModeChanged',{detail:'compact'})) } catch { /* Retain the fallback when this operation is unavailable. */ } }} className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${numericMode==='compact'?'bg-[#3B5BDB] text-white shadow-sm':'text-[#374151] hover:bg-white/70'}`}>Compact</button>
-                  <button type="button" onClick={() => { setNumericMode('full'); try { localStorage.setItem('globalDisplayMode','full') } catch { /* Retain the fallback when this operation is unavailable. */ } try { window.dispatchEvent(new CustomEvent('globalDisplayModeChanged',{detail:'full'})) } catch { /* Retain the fallback when this operation is unavailable. */ } }} className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${numericMode==='full'?'bg-[#3B5BDB] text-white shadow-sm':'text-[#374151] hover:bg-white/70'}`}>Full</button>
-                </div>
-              </div>
-              <div className="border-t border-[#ECECEC] mb-2" />
-              <nav className="flex flex-col">
-                {[
-                  {label:'Clients', path:'/client2', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="3" stroke="#404040"/><circle cx="16" cy="8" r="3" stroke="#404040"/><path d="M3 20c0-3.5 3-6 7-6s7 2.5 7 6" stroke="#404040"/></svg>
-                  )},
-                  {label:'Positions', path:'/positions', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="3" rx="1" stroke="#404040"/><rect x="3" y="11" width="18" height="3" rx="1" stroke="#404040"/><rect x="3" y="16" width="18" height="3" rx="1" stroke="#404040"/></svg>
-                  )},
-                  {label:'Pending Orders', path:'/pending-orders', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#404040"/><circle cx="12" cy="12" r="2" fill="#404040"/></svg>
-                  )},
-                  {label:'Margin Level', path:'/margin-level', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 18L10 12L14 16L20 8" stroke="#404040" strokeWidth="2"/></svg>
-                  )},
-                  {label:'Live Dealing', path:'/live-dealing', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12a9 9 0 0 1 18 0" stroke="#404040"/><path d="M7 12a5 5 0 0 1 10 0" stroke="#404040"/></svg>
-                  )},
-                  {label:'Client Percentage', path:'/client-percentage', active:true, icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6" stroke="#1A63BC"/><circle cx="8" cy="8" r="2" stroke="#1A63BC"/><circle cx="16" cy="16" r="2" stroke="#1A63BC"/></svg>
-                  )},
-                  {label:'Bills', path:'/bills', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#404040"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#404040" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  )},
-                  {label:'Brokerage Calculator', path:'/brokerage-calculator'},
-                  {label:'Tutorials', path:'/tutorials', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="4.5" width="19" height="15" rx="3" stroke="#404040"/><path d="M10 9.2v5.6l5-2.8-5-2.8z" fill="#404040"/></svg>
-                  )},
-                  {label:'Reports', path:'/reports/exchange', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="14" height="18" rx="2" stroke="#404040"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#404040" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  )},
-                  {label:'Settings', path:'/settings', icon:(
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z" stroke="#404040"/><path d="M4 12h2M18 12h2M12 4v2M12 18v2" stroke="#404040"/></svg>
-                  )},
-                ].map((item, idx) => item.path === '/ai' ? (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => { navigate('/ai', { state: { newChat: Date.now() } }); setIsSidebarOpen(false) }}
-                    className={`mt-1 flex items-center gap-3 px-4 h-11 rounded-lg text-[13px] font-semibold ${location.pathname === '/ai' ? 'bg-blue-600 text-white' : 'bg-blue-50/70 text-blue-700'}`}
-                  >
-                    <span className="w-5 h-5 flex items-center justify-center"><AskAiIcon className="w-5 h-5" /></span>
-                    <span>Ask AI</span>
-                  </button>
-                ) : item.path === '/reports/exchange' ? (
-                  <div key={idx}>
-                    <button type="button" onClick={() => setMobileReportsOpen(value => !value)} className="flex items-center gap-3 px-4 h-11 w-full text-left text-[13px] text-[#404040]">
-                      <span className="w-5 h-5 flex items-center justify-center"><ReportsIcon className="w-5 h-5 text-black" /></span>
-                      <span className="flex-1">Reports</span>
-                      <svg className={`w-4 h-4 transition-transform ${mobileReportsOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                    </button>
-                    {mobileReportsOpen && (
-                      <div className="flex flex-col pb-1">
-                        <button type="button" onClick={() => { navigate('/reports/exchange'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/exchange' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/exchange" />Brokerage Data</button>
-                        <button type="button" onClick={() => { navigate('/reports/historical-positions'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/historical-positions' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/historical-positions" />Historical Positions</button>
-                        <button type="button" onClick={() => { navigate('/reports/deals'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/deals' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/deals" />Deals</button>
-                        <button type="button" onClick={() => { navigate('/reports/summary'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/summary' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/summary" />Summary</button>
-                        <button type="button" onClick={() => { navigate('/reports/credit'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/credit' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/credit" />Credit Report</button>
-                        <button type="button" onClick={() => { navigate('/reports/agent-details'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/agent-details' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}><ReportSubIcon path="/reports/agent-details" />Agent Details</button>
-                        <button type="button" onClick={() => { navigate('/reports/deposit-withdrawal'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/deposit-withdrawal' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' :  'text-[#404040]'}`}><ReportSubIcon path="/reports/deposit-withdrawal" />D/W Report</button>
-                        <button type="button" onClick={() => { navigate('/reports/settlement'); setIsSidebarOpen(false) }} className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${location.pathname === '/reports/settlement' ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' :  'text-[#404040]'}`}><ReportSubIcon path="/reports/settlement" />Settlement Report</button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      navigate(item.path)
-                      setIsSidebarOpen(false)
-                    }}
-                    className={`flex items-center gap-3 px-4 h-11 text-[13px] ${item.active ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
-                  >
-                    <span className="w-5 h-5 flex items-center justify-center">{item.path === "/tutorials" ? <TutorialIcon className="w-5 h-5 text-[#404040]" /> : item.path === "/brokerage-calculator" ? <BrokerageCalcIcon className="w-5 h-5 text-[#404040]" /> : <img src={`${import.meta.env.BASE_URL||'/'}sidebar-icons/${{'/dashboard':'Dashboard','/client2':'Clients','/positions':'Positions','/pending-orders':'Pending-Orders','/margin-level':'Margin-Level','/live-dealing':'Live-Dealing','/client-percentage':'Client-Percentage','/bills':'Bills','/tutorials':'Tutorials','/settings':'Settings'}[item.path]}.svg`} alt={item.label} style={{filter:'brightness(0)'}} className="w-5 h-5"/>}</span>
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-              </nav>
-            </div>
-
-            <div className="p-4 mt-auto border-t border-[#ECECEC]">
-              <button onClick={logout} className="flex items-center gap-3 px-2 h-[37px] text-[10px] text-[#404040]">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M10 17l5-5-5-5" stroke="#404040" strokeWidth="2"/><path d="M4 12h11" stroke="#404040" strokeWidth="2"/></svg>
-                <span>Logout</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Shared mobile navigation drawer — one menu for every module (components/Sidebar.jsx) */}
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} onToggle={() => setIsSidebarOpen(value => !value)} mobileOnly />
 
       {/* Set Custom Percentage Modal */}
       {showEditModal && selectedClient && (

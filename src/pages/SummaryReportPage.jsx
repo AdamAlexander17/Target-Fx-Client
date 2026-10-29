@@ -1,11 +1,15 @@
 import BrokerCreditSummary from '../components/BrokerCreditSummary'
 import QuickTimeFilter from '../components/QuickTimeFilter'
-import { getPresetRange } from '../utils/dealTimePresets'
+import { getPresetRange, QUICK_FILTERS } from '../utils/dealTimePresets'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { brokerAPI } from '../services/api'
 import { useAuth } from '../contexts/authContextStore'
 import Sidebar from '../components/Sidebar'
+import MobileBottomNav from '../components/MobileBottomNav'
+import MobileCalendar from '../components/MobileCalendar'
+import MobileSelect from '../components/MobileSelect'
+import { formatIsoDate } from '../utils/isoDate'
 import GroupSelector from '../components/GroupSelector'
 import GroupModal from '../components/GroupModal'
 import CustomizeViewModal from '../components/CustomizeViewModal'
@@ -164,6 +168,7 @@ const SummaryReportPage = () => {
   const [range, setRange] = useState(() => getPresetRange('today'))
   const [customFrom, setCustomFrom] = useState(() => toYmd(serverNowDate()))
   const [customTo, setCustomTo] = useState(() => toYmd(serverNowDate()))
+  const [activeDateField, setActiveDateField] = useState(null) // 'from' | 'to' | null — mobile date panel
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   useEffect(() => {
     if (!datePickerOpen) return undefined
@@ -233,7 +238,17 @@ const SummaryReportPage = () => {
   }, [columnOrder])
   const resetColumns = () => { setColumnOrder(null); setVisibleColumns(getDefaultVisibleColumns()) }
   const [columnPickerOpen, setColumnPickerOpen] = useState(false)
-  const [columnSearch, setColumnSearch] = useState('')
+  // Pinned (frozen) columns on mobile — persisted
+  const [pinnedColumns, setPinnedColumns] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('summaryReportPinnedColumns') || '[]')
+      return Array.isArray(saved) ? saved : []
+    } catch { return [] }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('summaryReportPinnedColumns', JSON.stringify(pinnedColumns)) } catch { /* Retain the fallback when this operation is unavailable. */ }
+  }, [pinnedColumns])
+  const togglePinColumn = (key) => setPinnedColumns(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   useEffect(() => {
     if (!columnPickerOpen) return undefined
     const handlePointerDown = (event) => {
@@ -244,10 +259,20 @@ const SummaryReportPage = () => {
   }, [columnPickerOpen])
 
   const shownColumns = orderedColumns.filter(c => visibleColumns[c.key])
-  const shownMobileColumns = [
-    ...(visibleColumns.login ? [COLUMNS.find(c => c.key === 'login')] : []),
-    ...orderedColumns.filter(c => c.key !== 'login' && visibleColumns[c.key])
-  ]
+  // Mobile: pinned columns (Login always) render first and stay fixed while sliding sideways
+  const isMobilePinned = (column) => column.key === 'login' || pinnedColumns.includes(column.key)
+  const shownMobileColumns = (() => {
+    const visible = orderedColumns.filter(c => visibleColumns[c.key])
+    const login = visible.filter(c => c.key === 'login')
+    return [...login, ...visible.filter(c => c.key !== 'login' && isMobilePinned(c)), ...visible.filter(c => !isMobilePinned(c))]
+  })()
+  const mobilePinnedLeft = {}
+  shownMobileColumns.reduce((offset, c) => {
+    if (!isMobilePinned(c)) return offset
+    mobilePinnedLeft[c.key] = offset
+    return offset + (MOBILE_WIDTHS[c.key] || 90)
+  }, 0)
+  const mobilePinStyle = (column) => isMobilePinned(column) ? { left: mobilePinnedLeft[column.key], boxShadow: '2px 0 4px rgba(0,0,0,0.05)' } : undefined
   const mobileGrid = mobileGridFor(shownMobileColumns)
 
   // ───────── Pagination / sorting / data ─────────
@@ -324,9 +349,6 @@ const SummaryReportPage = () => {
   // sheet use nearly all of it (instead of the usual 85%) so its list has the most room above the keyboard.
   const keyboardLikelyOpen = typeof window !== 'undefined' && window.innerHeight - viewportHeight > 80
   const columnSheetMaxHeight = Math.round(viewportHeight * (keyboardLikelyOpen ? 0.98 : 0.85))
-  // ~140px covers the sheet's header row + search row (incl. their padding/borders) — whatever's
-  // left is what the list itself is allowed, as a hard pixel cap rather than a flex-based guess.
-  const columnListMaxHeight = Math.max(160, columnSheetMaxHeight - 140)
 
   const handleSort = (key) => {
     if (sortBy === key) setSortOrder(value => value === 'asc' ? 'desc' : 'asc')
@@ -460,22 +482,47 @@ const SummaryReportPage = () => {
   const iconButton = 'h-8 w-8 shrink-0 rounded-md border border-[#E5E7EB] bg-white text-[#374151] shadow-sm flex items-center justify-center transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
 
   const mobileDatePicker = (
-    <div data-summary-datepicker="" role="dialog" aria-label="Custom date range" onKeyDown={event => { if (event.key === 'Escape') setDatePickerOpen(false) }} className="fixed left-1/2 top-28 z-[100] w-[280px] max-w-[calc(100vw-24px)] -translate-x-1/2 max-h-[calc(100dvh-124px)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 text-left shadow-lg">
-      <h3 className="text-sm font-semibold text-slate-800">Custom date range</h3>
-      <p className="mt-1 text-[11px] text-slate-500">Filter the summary report for the selected period.</p>
-      <div className="mt-4 space-y-4">
-        <label className="block text-xs font-medium text-slate-600">
-          From
-          <input type="date" aria-label="From date" value={customFrom} max={customTo || toYmd(serverNowDate())} onChange={event => setCustomFrom(event.target.value)} className="mt-1.5 block h-10 w-full min-w-0 rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
-        </label>
-        <label className="block text-xs font-medium text-slate-600">
-          To
-          <input type="date" aria-label="To date" value={customTo} min={customFrom || undefined} max={toYmd(serverNowDate())} onChange={event => setCustomTo(event.target.value)} className="mt-1.5 block h-10 w-full min-w-0 rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
-        </label>
+    <div data-summary-datepicker="" role="dialog" aria-label="Custom date range" onKeyDown={event => { if (event.key === 'Escape') setDatePickerOpen(false) }} className="fixed left-1/2 top-28 z-[100] w-[calc(100vw-2rem)] max-w-[300px] -translate-x-1/2 max-h-[calc(100dvh-124px)] overflow-y-auto rounded-xl border border-[#D5DEEA] bg-white p-4 text-left shadow-[0_12px_32px_rgba(15,23,42,0.18)]">
+      <p className="text-[14px] font-extrabold tracking-tight text-[#0F172A]">Custom date range</p>
+      <p className="mt-0.5 text-[10.5px] leading-4 text-[#64748B]">Filter the summary report for the selected period.</p>
+      {/* From / To open the themed calendar inline (native date pickers can't be styled) */}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {[['from', 'From', customFrom], ['to', 'To', customTo]].map(([key, label, date]) => (
+          <button key={key} type="button" onClick={() => setActiveDateField(field => field === key ? null : key)}
+            className={`rounded-lg border px-2.5 py-1.5 text-left ${activeDateField === key ? 'border-[#2563EB] bg-[#2563EB]/[0.06]' : 'border-[#D5DEEA] bg-white/60'}`}>
+            <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">{label}</span>
+            <span className="mt-0.5 flex items-center gap-1.5">
+              <svg className={`h-3.5 w-3.5 shrink-0 ${activeDateField === key || date ? 'text-[#2563EB]' : 'text-[#94A3B8]'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></svg>
+              <span className={`min-w-0 truncate text-[13px] font-semibold ${date ? 'text-[#0F172A]' : 'text-[#9CA3AF]'}`}>{date ? formatIsoDate(date) : 'Select date'}</span>
+            </span>
+          </button>
+        ))}
       </div>
-      <div className="mt-5 flex items-center justify-between gap-3">
-        <button type="button" onClick={() => { setCustomFrom(''); setCustomTo('') }} disabled={!customFrom && !customTo} className="h-9 rounded-md px-2 text-xs font-medium text-slate-500 hover:bg-slate-50 disabled:text-slate-300">Clear</button>
-        <button type="button" onClick={applyCustomDates} disabled={!customFrom || !customTo || customFrom > customTo || customTo > toYmd(serverNowDate())} className="h-9 rounded-md bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">Apply dates</button>
+      {activeDateField && (
+        <div className="mt-2 rounded-lg border border-[#D5DEEA] bg-white/70 p-2">
+          <MobileCalendar
+            key={activeDateField}
+            value={activeDateField === 'from' ? customFrom : customTo}
+            min={activeDateField === 'to' ? customFrom || undefined : undefined}
+            max={activeDateField === 'from' ? (customTo || toYmd(serverNowDate())) : toYmd(serverNowDate())}
+            rangeStart={customFrom}
+            rangeEnd={customTo}
+            onChange={iso => {
+              if (activeDateField === 'from') {
+                setCustomFrom(iso)
+                if (customTo && customTo < iso) setCustomTo('')
+                setActiveDateField('to')
+              } else {
+                setCustomTo(iso)
+                setActiveDateField(null)
+              }
+            }}
+          />
+        </div>
+      )}
+      <div className="mt-3 flex items-center gap-2">
+        <button type="button" onClick={() => { setCustomFrom(''); setCustomTo('') }} disabled={!customFrom && !customTo} className="h-9 flex-1 rounded-lg border border-[#D5DEEA] bg-transparent text-[13px] font-semibold text-[#334155] disabled:cursor-not-allowed disabled:opacity-50">Clear</button>
+        <button type="button" onClick={applyCustomDates} disabled={!customFrom || !customTo || customFrom > customTo || customTo > toYmd(serverNowDate())} className="h-9 flex-1 rounded-lg bg-[#2563EB] text-[13px] font-semibold text-white shadow-[0_4px_10px_rgba(37,99,235,0.3)] disabled:opacity-50">Apply dates</button>
       </div>
     </div>
   )
@@ -521,7 +568,7 @@ const SummaryReportPage = () => {
     <>
       <QuickTimeFilter value={preset} onChange={value => { handlePreset(value); setDatePickerOpen(false) }} />
       <div className="relative" data-summary-datepicker="">
-        <button type="button" onClick={() => { if (isMobile && !datePickerOpen && preset !== 'custom') { setCustomFrom(''); setCustomTo('') } setDatePickerOpen(value => !value) }} className={iconButton} aria-expanded={datePickerOpen} aria-haspopup="dialog" aria-label="Choose custom dates">
+        <button type="button" onClick={() => { if (isMobile && !datePickerOpen && preset !== 'custom') { setCustomFrom(''); setCustomTo('') } setActiveDateField(null); setDatePickerOpen(value => !value) }} className={iconButton} aria-expanded={datePickerOpen} aria-haspopup="dialog" aria-label="Choose custom dates">
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></svg>
         </button>
         {!isMobile && datePickerPopover}
@@ -568,14 +615,20 @@ const SummaryReportPage = () => {
         onToggle={() => setSidebarOpen(value => { const next = !value; try { localStorage.setItem('sidebarOpen', JSON.stringify(next)) } catch (error) { console.warn('[SummaryReport] Failed to save sidebar state:', error) }; return next })}
       />
 
-      <main className={`flex-1 min-w-0 p-0 md:p-4 lg:p-6 transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'} flex flex-col overflow-hidden`}>
+      <main className={`report-mobile-theme report-white flex-1 min-w-0 p-0 md:p-4 lg:p-6 transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'} flex flex-col overflow-hidden`}>
         {/* ───────── Mobile ───────── */}
         <div className="md:hidden flex flex-1 flex-col overflow-hidden">
-          <div ref={mobileHeaderRef} className="flex-wrap relative flex items-center px-4 py-4 bg-white border-b border-[#ECECEC]">
-            <button type="button" onClick={() => setSidebarOpen(true)} className="w-12 h-12 rounded-2xl bg-[#F8F8F8] flex items-center justify-center" aria-label="Open menu">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round" /></svg>
+          <div ref={mobileHeaderRef} className="flex-wrap relative flex items-center gap-3 px-4 pt-4 pb-2 bg-transparent">
+            <button type="button" onClick={() => setSidebarOpen(true)} className="w-12 h-12 flex-shrink-0 rounded-2xl bg-transparent border border-[#D5DEEA] flex items-center justify-center" aria-label="Open menu">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round" /></svg>
             </button>
-            <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="text-lg font-semibold text-[#000000] min-w-0 max-sm:text-sm">Summary</h1><BrokerCreditSummary variant="header" /></div>
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className="truncate text-[#0F172A]">Summary</h1>
+                <p className="truncate text-[12px] text-[#64748B]">Account activity summary by login</p>
+              </div>
+              <BrokerCreditSummary variant="header" />
+            </div>
           
 
 
@@ -584,13 +637,18 @@ const SummaryReportPage = () => {
 
           <div ref={mobileScrollAreaRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
             <div ref={mobileAboveTableRef}>
-              <div className="pt-3 pb-2 px-2">
-                <div className="flex w-full flex-nowrap items-center gap-1 overflow-x-auto py-1 [&>select]:w-[72px] [&>select]:h-7 [&>select]:px-1 [&>select]:text-[10px] [&>button]:h-7 [&>button]:w-7 [&>div]:shrink-0 [&>div[data-summary-datepicker]>button]:h-7 [&>div[data-summary-datepicker]>button]:w-7">
-                  <div className="shrink-0">
-                    <button type="button" onClick={openMobileFilters} aria-haspopup="dialog" aria-expanded={mobileFilterView !== null} title={activeGroupName ? `Group filter: ${activeGroupName}` : 'Customize view'} className={`flex h-7 items-center gap-1 rounded-md border px-2 text-[10px] font-medium shadow-sm ${activeGroupName ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-[#E5E7EB] bg-white text-[#374151]'}`}>
+              <div className="pt-1 pb-2 px-4">
+                {/* One row, nothing hidden or sliding. actionButtons is shared with desktop, so sizes/order are set here. */}
+                <div className="flex w-full flex-nowrap items-center gap-1.5 py-1 [&>select]:hidden [&>div]:shrink-0 [&>button:not([aria-haspopup])]:order-5 [&>button:not([aria-haspopup])]:h-9 [&>button:not([aria-haspopup])]:w-9 [&>button:not([aria-haspopup])]:shrink-0 [&>button:not([aria-haspopup])]:rounded-xl [&>div[data-summary-datepicker]]:order-4 [&>div[data-summary-datepicker]>button]:h-9 [&>div[data-summary-datepicker]>button]:w-9 [&>div[data-summary-datepicker]>button]:rounded-xl">
+                  <MobileSelect ariaLabel="Time period" title="Time period" className="order-2 min-w-0 flex-1 !h-9 !px-3 !text-[12px] !font-semibold" value={preset}
+                    buttonLabel={QUICK_FILTERS.find(option => option.value === preset)?.label || (preset === 'custom' ? 'Custom' : 'Period')}
+                    onChange={value => { handlePreset(value); setDatePickerOpen(false) }}
+                    options={QUICK_FILTERS} />
+                  <div className="order-first shrink-0">
+                    <button type="button" onClick={openMobileFilters} aria-haspopup="dialog" aria-expanded={mobileFilterView !== null} title={activeGroupName ? `Group filter: ${activeGroupName}` : 'Customize view'} className={`relative flex h-9 items-center gap-1 rounded-xl border px-2.5 text-[11px] font-semibold shadow-sm ${activeGroupName ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-[#E5E7EB] bg-white text-[#374151]'}`}>
                       <svg className="h-3 w-3" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 3h14M4 6h10M6 9h6" /></svg>
                       Filter
-                      {activeGroupName && <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />}
+                      {activeGroupName && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[#2563EB] ring-2 ring-white" />}
                     </button>
                   </div>
                   {actionButtons}
@@ -598,39 +656,40 @@ const SummaryReportPage = () => {
                 {exportingNote}
               </div>
 
-              <div className="mx-1 mb-2 bg-white rounded-xl border border-[#E5E7EB] shadow-sm px-2.5 py-2">
+              <div className="mx-4 mb-3">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-[40%] max-w-[160px] min-w-0 h-7 bg-[#F9FAFB] border border-[#E5E7EB] rounded-md px-2 flex items-center gap-1.5">
-                    <svg width="12" height="12" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" /><path d="M13 13L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                    <input placeholder="Search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="flex-1 min-w-0 text-[11px] text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit" aria-label="Search clients" />
+                  <div className="flex-1 min-w-0 h-10 bg-transparent border border-[#D5DEEA] rounded-xl px-3 flex items-center gap-2">
+                    <svg width="15" height="15" viewBox="0 0 18 18" fill="none" className="flex-shrink-0 text-[#9CA3AF]"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" /><path d="M13 13L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                    <input
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')} placeholder="Search by login, name..." value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="report-plain-input flex-1 min-w-0 text-[13px] text-[#1F2937] placeholder-[#9CA3AF] outline-none bg-transparent font-outfit" aria-label="Search clients" />
                   </div>
-                  <button type="button" onClick={() => { setColumnSearch(''); setColumnPickerOpen(true) }} className="h-7 w-7 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 flex-shrink-0 mr-auto" title="Show/Hide Columns" aria-label="Show or hide columns">
+                  <button type="button" onClick={() => { setColumnPickerOpen(true) }} className="h-10 w-10 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center flex-shrink-0" title="Show/Hide Columns" aria-label="Show or hide columns">
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="4" height="10" rx="1" stroke="#4B5563" strokeWidth="1.2" /><rect x="8" y="3" width="6" height="10" rx="1" stroke="#4B5563" strokeWidth="1.2" /></svg>
                   </button>
-                  <button type="button" onClick={() => setPage(Math.max(1, page - 1))} disabled={prevDisabled} className={`h-7 w-7 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center flex-shrink-0 ${prevDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`} aria-label="Previous page">
+                  <button type="button" onClick={() => setPage(Math.max(1, page - 1))} disabled={prevDisabled} className={`h-10 w-9 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center flex-shrink-0 ${prevDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`} aria-label="Previous page">
                     <svg width="12" height="12" viewBox="0 0 20 20" fill="none"><path d="M12 14L8 10L12 6" stroke="#4B5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   </button>
-                  <div className="flex items-center gap-0.5 text-[11px] text-[#4B5563] flex-shrink-0">
-                    <input type="number" min="1" max={totalPages} value={page} onChange={onPageInput} className="w-8 h-6 border border-[#E5E7EB] rounded-md text-center text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Current page" />
+                  <div className="flex items-center gap-1 text-[13px] font-medium text-[#475569] flex-shrink-0">
+                    <input type="number" min="1" max={totalPages} value={page} onChange={onPageInput} className="report-page-box w-10 h-10 rounded-xl text-center text-[13px] font-semibold focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" aria-label="Current page" />
                     <span className="text-[#9CA3AF]">/</span>
                     <span>{totalPages}</span>
                   </div>
-                  <button type="button" onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={nextDisabled} className={`h-7 w-7 rounded-md bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center flex-shrink-0 ${nextDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`} aria-label="Next page">
+                  <button type="button" onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={nextDisabled} className={`h-10 w-9 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center flex-shrink-0 ${nextDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`} aria-label="Next page">
                     <svg width="12" height="12" viewBox="0 0 20 20" fill="none"><path d="M8 6L12 10L8 14" stroke="#4B5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   </button>
                 </div>
               </div>
             </div>
 
-            <div ref={mobileCardRef} className="bg-white shadow-sm border border-blue-100 overflow-hidden mx-1">
+            <div ref={mobileCardRef} className="bg-transparent border-y border-blue-100 max-md:border-b-0 overflow-hidden">
               {/* Fixed `height` (not `maxHeight`): the card's white background always fills the
                   remaining screen space down to the bottom, even when a page has few rows, so there's
                   no gray page background showing through below it. */}
               <div className="mobile-table-scroll w-full overflow-x-auto overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y', scrollbarWidth: 'none', height: mobileTableMaxHeight }}>
                 <div className="relative" style={{ minWidth: 'max-content' }}>
-                  <div data-mobile-data-row="header" className="grid bg-blue-500 text-white text-[10px] font-semibold font-outfit sticky top-0 z-20 shadow-[0_2px_4px_rgba(0,0,0,0.1)]" style={{ gridTemplateColumns: mobileGrid }}>
+                  <div data-mobile-data-row="header" className="grid bg-blue-500 text-white text-[10px] font-semibold font-outfit sticky -top-px z-20 shadow-[0_2px_6px_rgba(37,99,235,0.25)] [transform:translateZ(0)] [backface-visibility:hidden]" style={{ gridTemplateColumns: mobileGrid }}>
                     {shownMobileColumns.map(column => (
-                      <div key={column.key} onClick={() => handleSort(column.key)} className={`h-[32px] flex items-center px-1 cursor-pointer select-none ${column.key === 'login' ? 'sticky left-0 z-30 bg-blue-500 px-2' : ''}`}>
+                      <div key={column.key} onClick={() => handleSort(column.key)} className={`h-[32px] flex items-center px-1 cursor-pointer select-none ${isMobilePinned(column) ? 'sticky z-30 bg-blue-500 px-2' : ''}`} style={mobilePinStyle(column)}>
                         <span className="truncate">{column.label}</span>
                         {sortBy === column.key && <span className="ml-1">{sortOrder === 'asc' ? '↑' : '↓'}</span>}
                       </div>
@@ -639,9 +698,9 @@ const SummaryReportPage = () => {
 
                   {loading ? (
                     Array.from({ length: MOBILE_PAGE_SIZE }, (_, row) => (
-                      <div data-mobile-data-row="body" key={`sk-${row}`} className="grid bg-white border-b border-[#E1E1E1]" style={{ gridTemplateColumns: mobileGrid }}>
+                      <div data-mobile-data-row="body" key={`sk-${row}`} className="grid bg-transparent border-b border-[#E1E1E1]" style={{ gridTemplateColumns: mobileGrid }}>
                         {shownMobileColumns.map(column => (
-                          <div key={column.key} className={`h-[38px] flex items-center px-1 ${column.key === 'login' ? 'sticky left-0 bg-white z-10' : ''}`}>
+                          <div key={column.key} className={`h-[38px] flex items-center px-1 ${isMobilePinned(column) ? 'sticky bg-white z-10' : ''}`} style={mobilePinStyle(column)}>
                             <div className="h-3 w-full max-w-[80%] rounded bg-gray-200 animate-pulse" />
                           </div>
                         ))}
@@ -649,12 +708,12 @@ const SummaryReportPage = () => {
                     ))
                   ) : rows.length ? (
                     rows.map((row, index) => (
-                      <div data-mobile-data-row="body" key={`${row.login ?? 'r'}-m-${index}`} className="grid text-[10px] text-[#4B4B4B] font-outfit bg-white border-b border-[#E1E1E1] hover:bg-[#F8FAFC]" style={{ gridTemplateColumns: mobileGrid }}>
+                      <div data-mobile-data-row="body" key={`${row.login ?? 'r'}-m-${index}`} className="grid text-[10px] text-[#4B4B4B] font-outfit bg-transparent border-b border-[#E1E1E1]" style={{ gridTemplateColumns: mobileGrid }}>
                         {shownMobileColumns.map(column => (
                           <div
                             key={column.key}
-                            className={`h-[38px] flex items-center px-1 min-w-0 ${column.key === 'login' ? 'sticky left-0 bg-white z-10 px-2 text-[#1A63BC] font-semibold' : ''}`}
-                            style={column.key === 'login' ? { boxShadow: '2px 0 4px rgba(0,0,0,0.05)' } : undefined}
+                            className={`h-[38px] flex items-center px-1 min-w-0 ${isMobilePinned(column) ? 'sticky bg-white z-10 px-2' : ''} ${column.key === 'login' ? 'text-[#1A63BC] font-semibold' : ''}`}
+                            style={mobilePinStyle(column)}
                           >
                             <span className="truncate">{renderCell(column, row)}</span>
                           </div>
@@ -718,7 +777,7 @@ const SummaryReportPage = () => {
                   </button>
                 </div>
                 <div className="relative mr-auto" data-summary-column-picker="">
-                  <button type="button" onClick={() => { setColumnSearch(''); setColumnPickerOpen(value => !value) }} className="h-10 w-10 rounded-lg bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors" title="Show/Hide Columns" aria-label="Show or hide columns" aria-expanded={columnPickerOpen}>
+                  <button type="button" onClick={() => { setColumnPickerOpen(value => !value) }} className="h-10 w-10 rounded-lg bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors" title="Show/Hide Columns" aria-label="Show or hide columns" aria-expanded={columnPickerOpen}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                       <line x1="2" y1="4" x2="14" y2="4" stroke="#4B5563" strokeWidth="1.5" strokeLinecap="round" /><circle cx="6" cy="4" r="1.5" fill="white" stroke="#4B5563" strokeWidth="1.5" />
                       <line x1="2" y1="8" x2="14" y2="8" stroke="#4B5563" strokeWidth="1.5" strokeLinecap="round" /><circle cx="11" cy="8" r="1.5" fill="white" stroke="#4B5563" strokeWidth="1.5" />
@@ -831,6 +890,10 @@ const SummaryReportPage = () => {
             </div>
           </div>
         </div>
+        {/* Bottom Navigation (mobile only) */}
+        <div className="flex-shrink-0 md:hidden">
+          <MobileBottomNav onMore={() => setSidebarOpen(true)} />
+        </div>
       </main>
 
       {selectedClient && (isMobile ? (
@@ -886,39 +949,40 @@ const SummaryReportPage = () => {
 
       {/* Mobile column picker (bottom sheet) */}
       {columnPickerOpen && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setColumnPickerOpen(false)}>
-          <div data-summary-column-picker="" className="bg-white w-full rounded-t-[24px] overflow-hidden" style={{ maxHeight: columnSheetMaxHeight, display: 'flex', flexDirection: 'column' }} onClick={(event) => event.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between flex-shrink-0">
-              <h3 className="text-base font-semibold text-[#000000]">Show/Hide Columns</h3>
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={() => setVisibleColumns(getDefaultVisibleColumns())} className="text-xs font-medium text-blue-600">Reset</button>
-                <button type="button" onClick={() => setColumnPickerOpen(false)} aria-label="Close">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="#404040" strokeWidth="2" /></svg>
-                </button>
+        <div className="md:hidden fixed inset-0 bg-black/40 z-50 flex items-end" onClick={() => setColumnPickerOpen(false)}>
+          {/* Scoped restyle of the shared ColumnChooserList to match the mobile theme */}
+          <style>{`
+            .c2-col-chooser > div > div { border-color: #D5DEEA !important; }
+            .c2-col-chooser input[type="text"] { background: transparent !important; border-color: #D5DEEA !important; border-radius: 12px !important; height: 40px; font-size: 13px !important; }
+            .c2-col-chooser input[type="checkbox"] { width: 16px !important; height: 16px !important; accent-color: #2563EB; border-radius: 4px; }
+            .c2-col-chooser .overscroll-contain > [data-col-key] { padding-top: 10px; padding-bottom: 10px; margin-left: 12px; margin-right: 12px; border-radius: 0; border-bottom: 1px solid rgba(213, 222, 234, 0.6); }
+            .c2-col-chooser .overscroll-contain > [data-col-key] label span { font-size: 13px !important; color: #1F2937 !important; }
+          `}</style>
+          <div data-summary-column-picker="" className="bg-white w-full rounded-t-[28px] flex flex-col overflow-hidden shadow-[0_-8px_30px_rgba(15,23,42,0.12)]" style={{ maxHeight: columnSheetMaxHeight }} onClick={(event) => event.stopPropagation()}>
+            <div className="pt-2.5 flex justify-center flex-shrink-0"><span className="w-10 h-1 rounded-full bg-[#CBD5E1]" /></div>
+            <div className="px-5 pt-3 pb-3 border-b border-[#D5DEEA] flex items-center justify-between gap-3 flex-shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-[18px] leading-6 font-extrabold tracking-tight text-[#0F172A] truncate">Columns</h3>
+                <p className="text-[12px] text-[#64748B] truncate">Show, hide, pin & reorder columns</p>
               </div>
+              <button type="button" onClick={() => setColumnPickerOpen(false)} aria-label="Close" className="w-10 h-10 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" /></svg>
+              </button>
             </div>
-            <div className="px-5 py-3 border-b border-[#E5E7EB] flex-shrink-0">
-              <div className="relative h-11">
-                <input type="text" placeholder="Search Columns" value={columnSearch} onChange={(event) => setColumnSearch(event.target.value)} className="w-full h-11 pl-11 pr-4 bg-gray-100 border-0 rounded-xl text-xs text-black font-semibold font-outfit placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"><circle cx="8.5" cy="8.5" r="5.75" stroke="currentColor" strokeWidth="1.5" /><path d="M13 13L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-              </div>
-            </div>
-            {/* An explicit pixel max-height (not flex-1/min-h-0) guarantees this list scrolls —
-                flex-based auto-sizing is what kept silently failing to shrink in testing. */}
-            <div
-              className="overflow-y-auto overscroll-contain px-5 py-2"
-              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', maxHeight: columnListMaxHeight }}
-            >
-              {COLUMNS.filter(column => column.label.toLowerCase().includes(columnSearch.trim().toLowerCase())).map(column => (
-                <label key={column.key} className="flex items-center justify-between py-3 border-b border-[#F2F2F7] last:border-0">
-                  <span className="text-sm text-[#000000] font-outfit">{column.label}</span>
-                  <div className="relative inline-block w-12 h-6">
-                    <input type="checkbox" checked={!!visibleColumns[column.key]} onChange={() => toggleColumn(column.key)} className="sr-only peer" />
-                    <div className="w-12 h-6 bg-gray-300 rounded-full peer-checked:bg-blue-600 transition-colors" />
-                    <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-6" />
-                  </div>
-                </label>
-              ))}
+            <div className="c2-col-chooser flex-1 min-h-0 flex flex-col">
+              <ColumnChooserList
+                columns={COLUMNS}
+                visibleColumns={visibleColumns}
+                onToggle={toggleColumn}
+                columnOrder={columnOrder}
+                onReorder={(newOrder) => setColumnOrder(newOrder)}
+                onResetOrder={() => setColumnOrder(null)}
+                accent="blue"
+                title={null}
+                pinnedColumns={pinnedColumns}
+                onPinToggle={togglePinColumn}
+                reorderMode="touch"
+              />
             </div>
           </div>
         </div>

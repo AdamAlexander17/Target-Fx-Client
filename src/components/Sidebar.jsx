@@ -167,18 +167,18 @@ const Sidebar = ({ isOpen, onClose, onToggle, marginLevelCount = 0, mobileOnly =
             onClick={() => typeof onClose === 'function' && onClose()}
           />
           <aside className="absolute left-0 top-0 h-full w-[300px] bg-white shadow-xl rounded-r-2xl flex flex-col">
-            <div className="p-4 flex items-center gap-3 border-b border-[#ECECEC]">
-              <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+            <div className="p-4 flex items-center gap-3 border-b border-[#D5DEEA]">
+              <div className="w-10 h-10 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center">
                 <img src={`${baseUrl}Favicon.svg`} alt="Broker Eye" className="w-6 h-6" />
               </div>
               <div className="flex-1">
-                <div className="text-[14px] font-semibold text-[#1A63BC]">Broker Eye</div>
+                <div className="text-[16px] font-extrabold tracking-tight text-[#0F172A]">Broker Eye</div>
                 <div className="text-[11px] text-[#7A7A7A]">Financial Dashboard</div>
               </div>
               <button
                 type="button"
                 onClick={() => typeof onClose === 'function' && onClose()}
-                className="w-8 h-8 rounded-lg bg-[#F5F5F5] flex items-center justify-center"
+                className="w-9 h-9 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center"
                 aria-label="Close menu"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -201,25 +201,25 @@ const Sidebar = ({ isOpen, onClose, onToggle, marginLevelCount = 0, mobileOnly =
             >
               <div className="px-3 pb-3 pt-1">
                 <p className="text-[9px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1.5 px-1">Display Mode</p>
-                <div className="flex items-center bg-[#F3F4F6] p-0.5 w-full rounded">
+                <div className="flex items-center bg-transparent border border-[#D5DEEA] p-1 w-full rounded-xl">
                   <button
                     type="button"
                     onClick={() => changeDisplayMode('compact')}
-                    className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${displayMode === 'compact' ? 'bg-[#3B5BDB] text-white shadow-sm' : 'text-[#374151] hover:bg-white/70'}`}
+                    className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded-lg ${displayMode === 'compact' ? 'bg-[#2563EB] text-white shadow-sm' : 'text-[#374151] hover:bg-white/70'}`}
                   >
                     Compact
                   </button>
                   <button
                     type="button"
                     onClick={() => changeDisplayMode('full')}
-                    className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded ${displayMode === 'full' ? 'bg-[#3B5BDB] text-white shadow-sm' : 'text-[#374151] hover:bg-white/70'}`}
+                    className={`flex-1 py-1.5 text-[11px] font-medium transition-colors rounded-lg ${displayMode === 'full' ? 'bg-[#2563EB] text-white shadow-sm' : 'text-[#374151] hover:bg-white/70'}`}
                   >
                     Full
                   </button>
                 </div>
               </div>
-              <div className="border-t border-[#ECECEC] mb-2" />
-              <nav className="flex flex-col">
+              <div className="border-t border-[#D5DEEA] mb-2" />
+              <nav className="flex flex-col px-2">
                 {navigationItems.map(item => {
                   item.children?.some(child => isActivePath(child.path));
                   if (item.children) {
@@ -241,7 +241,7 @@ const Sidebar = ({ isOpen, onClose, onToggle, marginLevelCount = 0, mobileOnly =
                             key={child.path}
                             type="button"
                             onClick={() => handleNavigate(child.path)}
-                            className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${isActivePath(child.path) ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
+                            className={`flex items-center gap-2.5 w-full h-10 pl-12 pr-4 text-left text-[13px] ${isActivePath(child.path) ? 'text-[#2563EB] bg-[#2563EB]/10 border border-[#2563EB]/20 rounded-xl font-semibold' : 'text-[#404040]'}`}
                           >
                             <ReportSubIcon path={child.path} />
                             {child.name}
@@ -256,14 +256,14 @@ const Sidebar = ({ isOpen, onClose, onToggle, marginLevelCount = 0, mobileOnly =
                       key={item.path}
                       type="button"
                       onClick={() => handleNavigate(item.path)}
-                      className={`flex items-center gap-3 px-4 h-11 w-full text-[13px] ${isActivePath(item.path) ? 'text-[#1A63BC] bg-[#EFF4FB] rounded-lg font-semibold' : 'text-[#404040]'}`}
+                      className={`flex items-center gap-3 px-4 h-11 w-full text-[13px] ${isActivePath(item.path) ? 'text-[#2563EB] bg-[#2563EB]/10 border border-[#2563EB]/20 rounded-xl font-semibold' : 'text-[#404040]'}`}
                     >
                       {item.icon === 'ai' ? (
                         <AskAiIcon className="w-5 h-5 text-blue-600" />
                       ) : item.icon === 'tutorials' ? (
-                        <TutorialIcon className={`w-5 h-5 ${isActivePath(item.path) ? 'text-[#1A63BC]' : 'text-[#404040]'}`} />
+                        <TutorialIcon className={`w-5 h-5 ${isActivePath(item.path) ? 'text-[#2563EB]' : 'text-[#404040]'}`} />
                       ) : item.icon === 'brokerage' ? (
-                        <BrokerageCalcIcon className={`w-5 h-5 ${isActivePath(item.path) ? 'text-[#1A63BC]' : 'text-[#404040]'}`} />
+                        <BrokerageCalcIcon className={`w-5 h-5 ${isActivePath(item.path) ? 'text-[#2563EB]' : 'text-[#404040]'}`} />
                       ) : (
                         <img
                           src={`${baseUrl}sidebar-icons/${item.img}`}
@@ -280,14 +280,14 @@ const Sidebar = ({ isOpen, onClose, onToggle, marginLevelCount = 0, mobileOnly =
               </nav>
             </div>
 
-            <div className="p-4 mt-auto border-t border-[#ECECEC]">
+            <div className="p-4 mt-auto border-t border-[#D5DEEA]">
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex items-center gap-3 px-2 h-[37px] text-[10px] text-[#404040]"
+                className="flex items-center gap-3 px-2 h-10 text-[13px] text-[#404040]"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M10 17l5-5-5-5M4 12h11" stroke="#404040" strokeWidth="2" />
+                  <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 17l-5-5 5-5M5 12h11" stroke="#FF5F57" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 <span>Logout</span>
               </button>

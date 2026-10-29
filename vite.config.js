@@ -2,10 +2,24 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Every build gets its own id. It is compiled into the app and written to /version.json, so a
+// running app can tell when it is older than what is deployed (see ensureLatestBuild in main.jsx).
+const BUILD_ID = String(Date.now())
+const versionFile = () => ({
+  name: 'app-version-file',
+  apply: 'build',
+  generateBundle() {
+    this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD_ID }) })
+  }
+})
+
 // https://vite.dev/config/
 export default defineConfig({
   // Set base path for htdocs root deployment
   base: '/',
+  define: {
+    'import.meta.env.VITE_APP_BUILD': JSON.stringify(BUILD_ID)
+  },
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
@@ -18,6 +32,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    versionFile(),
     VitePWA({
       registerType: 'autoUpdate',
       // Registered manually in main.jsx via virtual:pwa-register, so a new deploy reloads the
@@ -30,7 +45,10 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // index.html is deliberately NOT precached: a precached shell keeps serving the previous
+        // build's HTML (and therefore its JS) after a deploy until the user hard-refreshes. Hashed
+        // JS/CSS are safe to precache because every build gets new filenames.
+        globPatterns: ['**/*.{js,css,ico,png,svg}'],
         navigateFallback: null, // Prevent service worker from intercepting navigation
         manifestTransforms: [
           async (entries) => {

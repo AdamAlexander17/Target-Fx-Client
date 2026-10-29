@@ -1402,6 +1402,7 @@ const Client2Page = () => {
         // Ignore response if it's from an outdated request (stale data)
         if (currentRequestId !== requestIdRef.current) {
           console.log('[Client2] Ignoring stale percentage response from request', currentRequestId, '(current:', requestIdRef.current, ')')
+          if (!silent) setInitialLoad(false)
           return
         }
 
@@ -1425,6 +1426,7 @@ const Client2Page = () => {
         // Ignore response if it's from an outdated request (stale data)
         if (currentRequestId !== requestIdRef.current) {
           console.log('[Client2] Ignoring stale normal response from request', currentRequestId, '(current:', requestIdRef.current, ')')
+          if (!silent) setInitialLoad(false)
           return
         }
 
@@ -3644,7 +3646,8 @@ const Client2Page = () => {
                       </div>
 
                       <input
-                        type="text"
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')}
+                       
                         placeholder="Search cards..."
                         value={cardFilterSearchQuery}
                         onChange={(e) => setCardFilterSearchQuery(e.target.value)}
@@ -4560,7 +4563,8 @@ const Client2Page = () => {
                                                 {(columnValues[columnKey] || []).length > 0 && (
                                                   <div className="px-3 py-2 border-b border-gray-200">
                                                     <input
-                                                      type="text"
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')}
+                                                     
                                                       placeholder="Search values..."
                                                       value={columnValueSearch[columnKey] || ''}
                                                       onChange={(e) => setColumnValueSearch(prev => ({ ...prev, [columnKey]: e.target.value }))}
@@ -4887,7 +4891,8 @@ const Client2Page = () => {
                                                 {allValues.length > 0 && (
                                                   <div className="px-3 py-2 border-b border-gray-200">
                                                     <input
-                                                      type="text"
+                  type="search" name="no-autofill-search" autoComplete="off" autoCorrect="off" spellCheck={false} data-lpignore="true" data-form-type="other" readOnly onPointerDown={e => e.currentTarget.removeAttribute('readonly')} onFocus={e => e.currentTarget.removeAttribute('readonly')}
+                                                     
                                                       placeholder="Search values..."
                                                       value={searchQuery}
                                                       onChange={(e) => setColumnValueSearch(prev => ({ ...prev, [columnKey]: e.target.value }))}

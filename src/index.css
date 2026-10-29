@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -225,6 +225,16 @@
   .ask-ai-composer > div > p:last-child {
     display: none;
   }
+
+  /* The AI disclaimer stays visible below the input on mobile */
+  .ask-ai-composer > div > p.ask-ai-disclaimer {
+    display: block !important;
+    order: 3;
+    margin-top: 6px;
+    margin-bottom: 0;
+    font-size: 10.5px;
+    line-height: 14px;
+  }
 }
 
 @keyframes ask-ai-drawer-in {
@@ -318,8 +328,9 @@
   min-width: 100%;
   height: calc(32px + var(--app-safe-bottom, 0px));
   flex: none;
-  border-top: 2px solid #3b82f6;
-  background: white;
+  /* no line here: rows already draw their own bottom divider, and the bottom nav has the final edge */
+  border-top: 0;
+  background: transparent;
 }
 .mobile-table-scroll {
   min-height: 0;
@@ -328,7 +339,7 @@
   padding-bottom: 0 !important;
   -webkit-overflow-scrolling: touch;
 }
-.mobile-table-scroll > table { border-bottom: 2px solid #3b82f6; }
+.mobile-table-scroll > table { border-bottom: 1px solid #BFDBFE; }
 .mobile-table-scroll > table + .mobile-table-end { border-top: 0; }
 .mobile-table-end-responsive { display: none; }
 @media (max-width: 767px) {
@@ -1248,3 +1259,94 @@ input[type="date"]::-webkit-datetime-edit-year-field {
 .ai-md th:first-child, .ai-md td:first-child { text-align: left; }
 .ai-md tbody tr:hover td { background: #f8fafc; }
 .ai-md { overflow-x: auto; }
+
+/* ── Reports: shared mobile theme ───────────────────────────────────────────────────────────────
+   Every report page tags its <main> with .report-mobile-theme. On phones this applies the same look
+   as the redesigned modules (gradient page, transparent outlined controls, transparent tables with
+   tinted pinned columns) without touching desktop. Floating layers (popups, dropdown menus, sheets)
+   are excluded so they keep their solid backgrounds. */
+@media (max-width: 767px) {
+  .report-mobile-theme {
+    background: linear-gradient(180deg, #EEF3FB 0%, #F7F9FC 100%) !important;
+  }
+
+  /* Header bar */
+  .report-mobile-theme header {
+    background: transparent !important;
+    border-bottom-color: #D5DEEA !important;
+    box-shadow: none !important;
+  }
+  /* Title size/weight comes from the global mobile h1 rule at the top of this file, same as Clients */
+  .report-mobile-theme header h1 {
+    color: #0F172A !important;
+  }
+  .report-mobile-theme header button.rounded-2xl {
+    background: transparent !important;
+    border: 1px solid #D5DEEA !important;
+  }
+
+  /* Page surfaces (cards, bars, wrappers) become transparent — never floating layers or table cells */
+  .report-mobile-theme :is(.bg-white, .bg-gray-50, .bg-\[\#F8F8F8\], .bg-\[\#F9FAFB\], .bg-\[\#F5F7FB\], .bg-\[\#F8FAFC\], .bg-\[\#FAFAFA\]):not(td, th, tr, thead, [class*="sticky"], .fixed, .absolute):not(:where(.fixed, .absolute, [role="dialog"], [role="menu"], [role="listbox"], thead) *) {
+    background-color: transparent !important;
+  }
+  .report-mobile-theme :is(.shadow-sm, .shadow, .shadow-md):not(.fixed, .absolute):not(:where(.fixed, .absolute, [role="dialog"], [role="menu"], [role="listbox"]) *) {
+    box-shadow: none !important;
+  }
+
+  /* Form controls: transparent, rounded, same border as the rest of the app */
+  .report-mobile-theme :is(input:not([type="checkbox"]):not([type="radio"]):not(.report-plain-input), select, textarea):not(:where(.fixed, .absolute, [role="dialog"], [role="menu"], table) *) {
+    background-color: transparent !important;
+    border: 1px solid #D5DEEA !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+  }
+
+  /* Outlined buttons (filters, icons, pagination) — primary/active blue buttons keep their colour */
+  .report-mobile-theme :is(button, a).border:not([class*="bg-blue"]):not([class*="bg-[#2563EB]"]):not([class*="bg-[#1A63BC]"]):not([class*="bg-[#3B82F6]"]):not(:where(.fixed, .absolute, [role="dialog"], [role="menu"], table) *) {
+    background-color: transparent !important;
+    border-color: #D5DEEA !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+  }
+
+  /* Tables: transparent rows; pinned (sticky) body cells get the page tint so scrolled columns don't show through */
+  .report-mobile-theme tbody tr.bg-white,
+  .report-mobile-theme tbody td.bg-white {
+    background-color: transparent !important;
+  }
+  .report-mobile-theme tbody td.bg-\[\#F9FAFB\] {
+    background-color: transparent !important;
+  }
+  /* Pinned cells — whether sticky comes from a class or an inline style */
+  .report-mobile-theme tbody td[class*="sticky"],
+  .report-mobile-theme tbody td[style*="sticky"] {
+    background-color: #F2F6FC !important;
+  }
+
+  /* Search boxes drawn as a bordered form (the input inside opts out with .report-plain-input) */
+  .report-mobile-theme form[role="search"] {
+    border-color: #D5DEEA !important;
+    box-shadow: none !important;
+  }
+
+  /* White variant, switched on per report page (add .report-white next to .report-mobile-theme) */
+  .report-mobile-theme.report-white {
+    background: #FFFFFF !important;
+  }
+  .report-mobile-theme.report-white tbody td[class*="sticky"],
+  .report-mobile-theme.report-white tbody td[style*="sticky"] {
+    background-color: #FFFFFF !important;
+  }
+
+  /* Current-page box: solid blue like every other module (wins over the transparent input rule above) */
+  .report-mobile-theme input[type="number"].report-page-box.report-page-box:not(.report-plain-input) {
+    background-color: #2563EB !important;
+    border-color: #2563EB !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3) !important;
+  }
+}
+
+/* search boxes use type="search" to stop login autofill; hide the native clear icon */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }

@@ -75,7 +75,7 @@ const FilterModal = ({
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.35)',
+          background: 'rgba(15, 23, 42, 0.45)',
           zIndex: 9998,
         }}
         onClick={onClose}
@@ -92,7 +92,8 @@ const FilterModal = ({
           maxWidth: '412px',
           height: 'auto',
           background: '#FFFFFF',
-          borderRadius: '20px 20px 0 0',
+          borderRadius: '28px 28px 0 0',
+          boxShadow: '0 -8px 30px rgba(15, 23, 42, 0.12)',
           zIndex: 9999,
           display: 'flex',
           flexDirection: 'column',
@@ -101,9 +102,9 @@ const FilterModal = ({
         {/* Top indicator line */}
         <div
           style={{
-            width: '47px',
-            height: '2px',
-            background: 'rgba(71, 84, 103, 0.55)',
+            width: '40px',
+            height: '4px',
+            background: '#CBD5E1',
             borderRadius: '2px',
             margin: '10px auto',
           }}
@@ -128,10 +129,16 @@ const FilterModal = ({
               onClose()
             }}
             style={{
-              background: 'none',
-              border: 'none',
+              background: 'transparent',
+              border: '1px solid #D5DEEA',
+              borderRadius: '12px',
               cursor: 'pointer',
-              padding: '5px',
+              width: '36px',
+              height: '36px',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
             <svg
@@ -154,18 +161,18 @@ const FilterModal = ({
           <h2
             style={{
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 600,
+              fontWeight: 800,
               fontSize: '18px',
               lineHeight: '24px',
-              color: '#4B4B4B',
-              letterSpacing: '-0.0041em',
+              color: '#0F172A',
+              letterSpacing: '-0.02em',
               margin: 0,
             }}
           >
             Filter
           </h2>
 
-          <div style={{ width: '18px' }} /> {/* Spacer for centering */}
+          <div style={{ width: '36px' }} /> {/* Spacer for centering */}
         </div>
 
         {/* Divider line */}
@@ -173,20 +180,23 @@ const FilterModal = ({
           style={{
             width: '100%',
             height: '1px',
-            background: '#F2F2F7',
+            background: '#D5DEEA',
             marginBottom: '20px',
           }}
         />
 
         {/* Filter options */}
-        <div style={{ flex: 1, padding: '0 20px', marginBottom: '20px' }}>
+        <div style={{ flex: 1, padding: '0 20px', marginBottom: '4px' }}>
           {/* Has Floating */}
           <label
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              padding: '16px 0',
+              padding: '13px 14px',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
+              marginBottom: '10px',
               cursor: 'pointer',
             }}
           >
@@ -204,10 +214,10 @@ const FilterModal = ({
             <span
               style={{
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '16px',
+                fontWeight: 500,
+                fontSize: '15px',
                 lineHeight: '20px',
-                color: '#1B2D45',
+                color: '#0F172A',
               }}
             >
               Has Floating
@@ -220,7 +230,10 @@ const FilterModal = ({
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              padding: '16px 0',
+              padding: '13px 14px',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
+              marginBottom: '10px',
               cursor: 'pointer',
             }}
           >
@@ -238,10 +251,10 @@ const FilterModal = ({
             <span
               style={{
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '16px',
+                fontWeight: 500,
+                fontSize: '15px',
                 lineHeight: '20px',
-                color: '#1B2D45',
+                color: '#0F172A',
               }}
             >
               Has Credit
@@ -254,7 +267,10 @@ const FilterModal = ({
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              padding: '16px 0',
+              padding: '13px 14px',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
+              marginBottom: '10px',
               cursor: 'pointer',
             }}
           >
@@ -272,10 +288,10 @@ const FilterModal = ({
             <span
               style={{
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '16px',
+                fontWeight: 500,
+                fontSize: '15px',
                 lineHeight: '20px',
-                color: '#1B2D45',
+                color: '#0F172A',
               }}
             >
               No Deposit
@@ -288,7 +304,10 @@ const FilterModal = ({
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              padding: '16px 0',
+              padding: '13px 14px',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
+              marginBottom: '10px',
               cursor: 'pointer',
             }}
           >
@@ -306,10 +325,10 @@ const FilterModal = ({
             <span
               style={{
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '16px',
+                fontWeight: 500,
+                fontSize: '15px',
                 lineHeight: '20px',
-                color: '#1B2D45',
+                color: '#0F172A',
               }}
             >
               Has P&L
@@ -322,8 +341,8 @@ const FilterModal = ({
           style={{
             width: '100%',
             height: '1px',
-            background: '#F2F2F7',
-            margin: '20px 0',
+            background: '#D5DEEA',
+            margin: '16px 0',
           }}
         />
 
@@ -343,19 +362,19 @@ const FilterModal = ({
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              padding: '10px 16px',
-              background: '#E5E7EB',
-              border: '1px solid #D1D5DB',
-              borderRadius: '20px',
-              boxShadow: '0px 0px 50px rgba(0, 0, 0, 0.05)',
+              padding: '12px 16px',
+              background: 'transparent',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
+              boxShadow: 'none',
               cursor: 'pointer',
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 400,
-              fontSize: '12px',
+              fontWeight: 600,
+              fontSize: '14px',
               lineHeight: '20px',
-              letterSpacing: '0.06em',
+              letterSpacing: '0.01em',
               textTransform: 'capitalize',
-              color: '#6B7280',
+              color: '#334155',
             }}
           >
             Reset
@@ -370,19 +389,19 @@ const FilterModal = ({
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              padding: '10px 27px',
-              background: (hasFloating || hasCredit || noDeposit || hasPnl) ? '#2563EB' : '#E5E7EB',
-              border: '1px solid ' + ((hasFloating || hasCredit || noDeposit || hasPnl) ? '#2563EB' : '#D1D5DB'),
-              borderRadius: '20px',
-              boxShadow: '0px 0px 50px rgba(0, 0, 0, 0.05)',
+              padding: '12px 16px',
+              background: (hasFloating || hasCredit || noDeposit || hasPnl) ? '#2563EB' : 'rgba(37, 99, 235, 0.28)',
+              border: '1px solid ' + ((hasFloating || hasCredit || noDeposit || hasPnl) ? '#2563EB' : 'transparent'),
+              borderRadius: '14px',
+              boxShadow: 'none',
               cursor: (hasFloating || hasCredit || noDeposit || hasPnl) ? 'pointer' : 'not-allowed',
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 400,
-              fontSize: '12px',
+              fontWeight: 600,
+              fontSize: '14px',
               lineHeight: '20px',
-              letterSpacing: '0.06em',
+              letterSpacing: '0.01em',
               textTransform: 'capitalize',
-              color: (hasFloating || hasCredit || noDeposit || hasPnl) ? '#FFFFFF' : '#6B7280',
+              color: (hasFloating || hasCredit || noDeposit || hasPnl) ? '#FFFFFF' : '#FFFFFF',
             }}
           >
             Apply

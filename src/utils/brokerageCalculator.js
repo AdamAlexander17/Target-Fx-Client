@@ -39,9 +39,41 @@ export function calculatorRateRows(rows, client = false) {
     const rate = blank ? null : calculatorNumber(row.rate)
     if (!blank && (rate == null || rate < 0)) throw new Error(`Enter a non-negative rate for ${exchange}, or leave it blank.`)
     if (client) return { login, exchange, method, rate }
-    if (!['INR', 'USD'].includes(row.currency)) throw new Error(`Choose INR or USD for ${exchange}.`)
-    return { exchange, method, rate, currency: row.currency }
+    // The rate's currency is fixed per exchange by the backend, so it is never sent
+    return { exchange, method, rate }
   })
+}
+
+// Report-scoped editing must not expose unrelated saved overrides or exchanges.
+export function calculatorClientRateScope(exchanges, saved, login, scope) {
+  const names = [...new Set(scope.map(item => typeof item === 'string' ? item : item.exchange).filter(Boolean))]
+  const allowed = new Set(names)
+  const original = saved.filter(row => String(row.login) === String(login) && allowed.has(row.exchange))
+  return {
+    exchanges: names.map(exchange => exchanges.find(item => item.exchange === exchange) || { exchange }),
+    original,
+    rows: names.map(exchange => {
+      const row = original.find(item => item.exchange === exchange)
+      return { ...(row || { login, exchange, fixed: true }), method: row?.method ?? '', rate: row?.rate ?? '' }
+    }),
+  }
+}
+
+// Group rates: one row per saved filter group × exchange; blank method/rate = use the exchange rate
+export function changedGroupRates(rows, original) {
+  const key = row => `${row.group}\u0000${row.exchange}`
+  const normalize = row => {
+    const method = row.method || null
+    if (method !== null && !['lot', 'crore'].includes(method)) throw new Error(`Choose Per Lot or Per Crore for ${row.exchange}.`)
+    const blank = row.rate == null || String(row.rate).trim() === ''
+    const rate = blank ? null : calculatorNumber(row.rate)
+    if (!blank && (rate == null || rate < 0)) throw new Error(`Enter a non-negative rate for ${row.exchange}, or leave it blank.`)
+    return { group: row.group, exchange: row.exchange, method, rate }
+  }
+  const before = new Map(original.map(row => [key(row), JSON.stringify(normalize(row))]))
+  const changed = rows.map(normalize).filter(row => (before.get(key(row)) ?? JSON.stringify({ ...row, method: null, rate: null })) !== JSON.stringify(row))
+  if (changed.length > 1000) throw new Error('Save no more than 1,000 changed rates at a time.')
+  return changed
 }
 
 export function changedCalculatorRates(rows, original, client = false) {

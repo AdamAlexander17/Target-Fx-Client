@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import Sidebar from '../components/Sidebar'
 import BrokerCreditSummary from '../components/BrokerCreditSummary'
+import MobileBottomNav from '../components/MobileBottomNav'
+import MobileSelect from '../components/MobileSelect'
 import { useAuth } from '../contexts/authContextStore'
 import { tutorialsAPI } from '../services/api'
 
@@ -106,7 +108,7 @@ function TutorialCard({ tutorial, onPlay }) {
     <button
       type="button"
       onClick={onPlay}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-1 hover:border-blue-300 hover:shadow-[0_18px_44px_-14px_rgba(37,99,235,0.38)]"
+      className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-1 hover:border-blue-300 hover:shadow-[0_18px_44px_-14px_rgba(37,99,235,0.38)] max-lg:border max-lg:border-[#D5DEEA] max-lg:bg-white max-lg:shadow-none max-lg:hover:translate-y-0"
     >
       <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
         <div className="h-full w-full transition-transform duration-500 group-hover:scale-[1.07]">
@@ -123,9 +125,9 @@ function TutorialCard({ tutorial, onPlay }) {
         {duration && <span className="absolute bottom-2 right-2 rounded-md bg-slate-900/75 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm sm:text-[11px]">{duration}</span>}
       </div>
       <div className="flex flex-1 flex-col p-3 sm:p-3.5">
-        <h3 className="line-clamp-2 min-h-[2.5em] text-[13.5px] font-bold leading-snug text-slate-900 transition-colors group-hover:text-blue-700 sm:text-[15px]">{tutorial.title}</h3>
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5">
-          <span className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-blue-600 transition-colors group-hover:text-blue-700 sm:text-[12px]">
+        <h3 className="line-clamp-2 min-h-[2.5em] text-[13.5px] font-bold leading-snug text-slate-900 max-lg:text-[#0F172A] transition-colors group-hover:text-blue-700 sm:text-[15px]">{tutorial.title}</h3>
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5 max-lg:border-[#D5DEEA]">
+          <span className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-blue-600 max-lg:text-[#2563EB] transition-colors group-hover:text-blue-700 sm:text-[12px]">
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-50 transition-colors group-hover:bg-blue-600">
               <svg className="ml-0.5 h-2.5 w-2.5 text-blue-600 transition-colors group-hover:text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
             </span>
@@ -211,7 +213,14 @@ export default function TutorialsPage() {
   )
 
   // Language filter — rendered in the fixed region so it stays constant while scrolling.
-  const languageFilter = languages.length > 0 ? (
+  const languageFilter = languages.length > 0 ? (isMobile ? (
+    <div className="flex items-center gap-2">
+      {/* Styled option sheet (native select lists can't be themed) */}
+      <MobileSelect ariaLabel="Language" title="Language" className="w-[160px] !h-9 !px-3 !text-[12px] !font-semibold" value={language}
+        onChange={setLanguage}
+        options={[{ value: 'all', label: 'All languages' }, ...languages.map(l => ({ value: l, label: l }))]} />
+    </div>
+  ) : (
     <div className="relative inline-block">
       <select value={language} onChange={e => setLanguage(e.target.value)} className="appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-9 text-[13px] font-medium text-slate-700 shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
         <option value="all">All languages</option>
@@ -219,7 +228,7 @@ export default function TutorialsPage() {
       </select>
       <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 9 5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
     </div>
-  ) : null
+  )) : null
 
   const content = (
     <>
@@ -263,7 +272,7 @@ export default function TutorialsPage() {
   // modules. Just the public videos, a brand bar, and a Login button.
   if (!isAuthenticated) {
     return (
-      <div className="flex h-screen flex-col overflow-hidden bg-[#F8FAFC]">
+      <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#F8FAFC]">
         <header className="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="mx-auto flex max-w-7xl items-center gap-2.5 px-4 py-3 sm:px-6">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
@@ -384,7 +393,7 @@ export default function TutorialsPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
+    <div className={`flex h-[100dvh] overflow-hidden ${isMobile ? 'bg-white' : 'bg-[#F8FAFC]'}`}>
       {isMobile ? (
         <Sidebar isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} onToggle={() => setIsMobileSidebarOpen(v => !v)} mobileOnly />
       ) : (
@@ -394,24 +403,31 @@ export default function TutorialsPage() {
       {/* Content column: fixed to the viewport height; the <main> inside is the scroll area. */}
       <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${isMobile ? '' : `transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'}`}`}>
         {isMobile ? (
-          <div className="shrink-0 bg-white shadow-sm">
-            <div className="flex items-center justify-between px-4 py-4">
-              <button onClick={() => setIsMobileSidebarOpen(true)} className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F8F8F8]" aria-label="Open navigation">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round" /></svg>
+          <div className="shrink-0 bg-transparent">
+            <div className="flex items-center gap-3 px-4 pt-4 pb-2">
+              <button onClick={() => setIsMobileSidebarOpen(true)} className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-[#D5DEEA] bg-transparent" aria-label="Open navigation">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="#000000" strokeWidth="2" strokeLinecap="round" /></svg>
               </button>
-              <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="min-w-0 text-xl font-semibold text-black max-sm:text-base">Tutorials</h1><BrokerCreditSummary variant="header" /></div>
-              <div className="h-9 w-9" />
+              <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="truncate text-[#0F172A]">Tutorials</h1>
+                  <p className="truncate text-[12px] text-[#64748B]">Learn how to use every module</p>
+                </div>
+                <BrokerCreditSummary variant="header" />
+              </div>
             </div>
             <BrokerCreditSummary variant="desktop-header" />
           </div>
         ) : desktopHeader}
 
         {/* Fixed language filter — stays constant while the list scrolls */}
-        {languageFilter && <div className="shrink-0 px-3 pt-4 sm:px-4 lg:px-6 lg:pt-5">{languageFilter}</div>}
+        {languageFilter && <div className="shrink-0 px-4 pt-2 lg:px-6 lg:pt-5">{languageFilter}</div>}
 
-        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3 pt-4 sm:px-4 lg:px-6 lg:pt-5" style={{ WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + var(--app-safe-bottom, 0px))' }}>
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-3 pt-3 lg:px-6 lg:pt-5" style={{ WebkitOverflowScrolling: 'touch', paddingBottom: isMobile ? '12px' : 'calc(28px + var(--app-safe-bottom, 0px))' }}>
           <div className="w-full">{content}</div>
         </main>
+        {/* Bottom Navigation (mobile only) */}
+        {isMobile && <div className="flex-shrink-0"><MobileBottomNav onMore={() => setIsMobileSidebarOpen(true)} /></div>}
       </div>
 
       {active && <VideoModal tutorial={active} onClose={() => setActive(null)} />}

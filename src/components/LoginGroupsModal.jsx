@@ -9,6 +9,7 @@ const LoginGroupsModal = ({
   onCreateGroup,
   onEditGroup,
   onDeleteGroup,
+  onRatesClick,
   onSelectGroup,
   activeGroupName,
   onPendingChange
@@ -99,7 +100,7 @@ const LoginGroupsModal = ({
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.35)',
+          background: 'rgba(15, 23, 42, 0.45)',
           zIndex: 9998,
         }}
         onClick={onClose}
@@ -118,7 +119,8 @@ const LoginGroupsModal = ({
           height: 'auto',
           maxHeight: isSearchFocused ? 'calc(85vh + 100px)' : '85vh',
           background: '#FFFFFF',
-          borderRadius: '20px 20px 0 0',
+          borderRadius: '28px 28px 0 0',
+          boxShadow: '0 -8px 30px rgba(15, 23, 42, 0.12)',
           zIndex: 9999,
           display: 'flex',
           flexDirection: 'column',
@@ -128,9 +130,9 @@ const LoginGroupsModal = ({
         {/* Top indicator line */}
         <div
           style={{
-            width: '47px',
-            height: '2px',
-            background: 'rgba(71, 84, 103, 0.55)',
+            width: '40px',
+            height: '4px',
+            background: '#CBD5E1',
             borderRadius: '2px',
             margin: '10px auto',
           }}
@@ -159,10 +161,16 @@ const LoginGroupsModal = ({
               onClose()
             }}
             style={{
-              background: 'none',
-              border: 'none',
+              background: 'transparent',
+              border: '1px solid #D5DEEA',
+              borderRadius: '12px',
               cursor: 'pointer',
-              padding: '5px',
+              width: '36px',
+              height: '36px',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
             <svg
@@ -185,11 +193,11 @@ const LoginGroupsModal = ({
           <h2
             style={{
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 600,
+              fontWeight: 800,
               fontSize: '18px',
               lineHeight: '24px',
-              color: '#4B4B4B',
-              letterSpacing: '-0.0041em',
+              color: '#0F172A',
+              letterSpacing: '-0.02em',
               margin: 0,
             }}
           >
@@ -203,10 +211,13 @@ const LoginGroupsModal = ({
               onClose()
             }}
             style={{
-              background: 'none',
-              border: 'none',
+              background: 'transparent',
+              border: '1px solid #D5DEEA',
+              borderRadius: '12px',
               cursor: 'pointer',
-              padding: '5px',
+              width: '36px',
+              height: '36px',
+              padding: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -234,7 +245,7 @@ const LoginGroupsModal = ({
           style={{
             width: '100%',
             height: '1px',
-            background: '#F2F2F7',
+            background: '#D5DEEA',
             marginBottom: '20px',
           }}
         />
@@ -244,7 +255,7 @@ const LoginGroupsModal = ({
           style={{
             flex: 1,
             overflowY: 'auto',
-            minHeight: '500px',
+            minHeight: '260px',
             maxHeight: isSearchFocused ? '600px' : '500px',
             transition: 'max-height 0.25s ease'
           }}
@@ -262,13 +273,12 @@ const LoginGroupsModal = ({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '12px 0',
-                      borderBottom: index < groups.length - 1 ? '1px solid #F2F2F7' : 'none',
+                      padding: '12px 14px',
+                      border: isSelected ? '1.5px solid #2563EB' : '1px solid #D5DEEA',
+                      borderRadius: '14px',
+                      marginBottom: '10px',
                       cursor: 'pointer',
-                      background: isSelected ? '#F0F9FF' : 'transparent',
-                      margin: '0 -20px',
-                      paddingLeft: '20px',
-                      paddingRight: '20px',
+                      background: isSelected ? 'rgba(37, 99, 235, 0.08)' : 'transparent',
                     }}
                   >
                     <div style={{ flex: 1 }}>
@@ -277,8 +287,8 @@ const LoginGroupsModal = ({
                           fontFamily: 'Outfit, sans-serif',
                           fontSize: '15px',
                           lineHeight: '18px',
-                          color: isSelected ? '#2563EB' : '#1B2D45',
-                          fontWeight: isSelected ? 600 : 500,
+                          color: isSelected ? '#2563EB' : '#0F172A',
+                          fontWeight: 600,
                         }}
                       >
                         {group.name}
@@ -301,9 +311,34 @@ const LoginGroupsModal = ({
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '12px',
+                        gap: '8px',
                       }}
                     >
+                      {onRatesClick && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onRatesClick(group)
+                          }}
+                          aria-label={`Brokerage rates for ${group.name}`}
+                          title={`Brokerage rates for ${group.name}`}
+                          style={{
+                            background: '#FFFFFF',
+                            border: '1px solid #BFDBFE',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            minHeight: '34px',
+                            padding: '0 10px',
+                            color: '#2563EB',
+                            fontFamily: 'Outfit, sans-serif',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Rates
+                        </button>
+                      )}
                       {/* Edit button */}
                       <button
                         onClick={(e) => {
@@ -311,10 +346,13 @@ const LoginGroupsModal = ({
                           onEditGroup && onEditGroup(group)
                         }}
                         style={{
-                          background: 'none',
-                          border: 'none',
+                          background: 'transparent',
+                          border: '1px solid #D5DEEA',
+                          borderRadius: '10px',
                           cursor: 'pointer',
-                          padding: '4px',
+                          width: '34px',
+                          height: '34px',
+                          padding: 0,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -338,10 +376,13 @@ const LoginGroupsModal = ({
                           onDeleteGroup && onDeleteGroup(group)
                         }}
                         style={{
-                          background: 'none',
-                          border: 'none',
+                          background: 'transparent',
+                          border: '1px solid #D5DEEA',
+                          borderRadius: '10px',
                           cursor: 'pointer',
-                          padding: '4px',
+                          width: '34px',
+                          height: '34px',
+                          padding: 0,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -415,8 +456,8 @@ const LoginGroupsModal = ({
                   justifyContent: 'center',
                   gap: '8px',
                   padding: '12px 24px',
-                  background: '#FFFFFF',
-                  border: '1px solid #E6EEF8',
+                  background: 'transparent',
+                  border: '1px solid #D5DEEA',
                   borderRadius: '12px',
                   cursor: 'pointer',
                   fontFamily: 'Outfit, sans-serif',
@@ -424,7 +465,7 @@ const LoginGroupsModal = ({
                   lineHeight: '20px',
                   color: '#1B2D45',
                   fontWeight: 500,
-                  boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
+                  boxShadow: 'none',
                 }}
               >
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -445,8 +486,8 @@ const LoginGroupsModal = ({
         {hasGroups && (
           <div
             style={{
-              padding: '0 20px 20px',
-              borderTop: '1px solid #F2F2F7',
+              padding: '14px 20px 20px',
+              borderTop: '1px solid #D5DEEA',
               display: 'flex',
               gap: '16px',
             }}
@@ -459,19 +500,19 @@ const LoginGroupsModal = ({
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
-                padding: '10px 16px',
-                background: '#E5E7EB',
-                border: '1px solid #D1D5DB',
-                borderRadius: '20px',
-                boxShadow: '0px 0px 50px rgba(0, 0, 0, 0.05)',
+                padding: '12px 16px',
+                background: 'transparent',
+                border: '1px solid #D5DEEA',
+                borderRadius: '14px',
+                boxShadow: 'none',
                 cursor: 'pointer',
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '12px',
+                fontWeight: 600,
+                fontSize: '14px',
                 lineHeight: '20px',
-                letterSpacing: '0.06em',
+                letterSpacing: '0.01em',
                 textTransform: 'capitalize',
-                color: '#6B7280',
+                color: '#334155',
               }}
             >
               Reset
@@ -485,19 +526,19 @@ const LoginGroupsModal = ({
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
-                padding: '10px 27px',
-                background: tempSelectedGroup ? '#2563EB' : '#E5E7EB',
-                border: '1px solid ' + (tempSelectedGroup ? '#2563EB' : '#D1D5DB'),
-                borderRadius: '20px',
-                boxShadow: '0px 0px 50px rgba(0, 0, 0, 0.05)',
+                padding: '12px 16px',
+                background: tempSelectedGroup ? '#2563EB' : 'rgba(37, 99, 235, 0.28)',
+                border: '1px solid ' + (tempSelectedGroup ? '#2563EB' : 'transparent'),
+                borderRadius: '14px',
+                boxShadow: 'none',
                 cursor: tempSelectedGroup ? 'pointer' : 'not-allowed',
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '12px',
+                fontWeight: 600,
+                fontSize: '14px',
                 lineHeight: '20px',
-                letterSpacing: '0.06em',
+                letterSpacing: '0.01em',
                 textTransform: 'capitalize',
-                color: tempSelectedGroup ? '#FFFFFF' : '#6B7280',
+                color: tempSelectedGroup ? '#FFFFFF' : '#FFFFFF',
               }}
             >
               Apply

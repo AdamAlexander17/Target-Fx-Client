@@ -51,11 +51,16 @@ const DealsFilterModal = ({
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.35)',
+          background: 'rgba(15, 23, 42, 0.45)',
           zIndex: 9998,
         }}
         onClick={onClose}
       />
+
+      {/* Hide the floating Ask AI button while this sheet is open */}
+
+      <style>{'.ask-ai-fab { display: none !important; }'}</style>
+
 
       {/* Modal content */}
       <div
@@ -68,7 +73,8 @@ const DealsFilterModal = ({
           maxWidth: '412px',
           height: 'auto',
           background: '#FFFFFF',
-          borderRadius: '20px 20px 0 0',
+          borderRadius: '28px 28px 0 0',
+          boxShadow: '0 -8px 30px rgba(15, 23, 42, 0.12)',
           zIndex: 9999,
           display: 'flex',
           flexDirection: 'column',
@@ -77,9 +83,9 @@ const DealsFilterModal = ({
         {/* Top indicator line */}
         <div
           style={{
-            width: '47px',
-            height: '2px',
-            background: '#E5E7EB',
+            width: '40px',
+            height: '4px',
+            background: '#CBD5E1',
             borderRadius: '100px',
             margin: '12px auto 0',
           }}
@@ -91,7 +97,7 @@ const DealsFilterModal = ({
             display: 'flex',
             alignItems: 'center',
             padding: '20px 20px 16px',
-            borderBottom: '1px solid #F2F2F7',
+            borderBottom: '1px solid #D5DEEA',
           }}
         >
           <button
@@ -104,25 +110,29 @@ const DealsFilterModal = ({
             }}
             style={{
               background: 'transparent',
-              border: 'none',
+              border: '1px solid #D5DEEA',
+              borderRadius: '12px',
               cursor: 'pointer',
-              padding: '4px',
+              width: '36px',
+              height: '36px',
+              padding: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M15 18L9 12L15 6" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M15 18L9 12L15 6" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
           <h2
             style={{
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 600,
+              fontWeight: 800,
               fontSize: '18px',
               lineHeight: '23px',
-              color: '#000000',
+              color: '#0F172A',
+              letterSpacing: '-0.02em',
               margin: '0 0 0 12px',
               flex: 1,
             }}
@@ -134,7 +144,7 @@ const DealsFilterModal = ({
         {/* Filter Options */}
         <div
           style={{
-            padding: '0 20px',
+            padding: '16px 20px 6px',
             flex: 1,
             overflowY: 'auto',
           }}
@@ -145,8 +155,10 @@ const DealsFilterModal = ({
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              padding: '16px 0',
-              borderBottom: '1px solid #F2F2F7',
+              padding: '13px 14px',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
+              marginBottom: '10px',
               cursor: 'pointer',
             }}
           >
@@ -164,10 +176,10 @@ const DealsFilterModal = ({
             <span
               style={{
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '16px',
+                fontWeight: 500,
+                fontSize: '15px',
                 lineHeight: '20px',
-                color: '#1B2D45',
+                color: '#0F172A',
               }}
             >
               Deals
@@ -180,8 +192,10 @@ const DealsFilterModal = ({
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              padding: '16px 0',
-              borderBottom: '1px solid #F2F2F7',
+              padding: '13px 14px',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
+              marginBottom: '10px',
               cursor: 'pointer',
             }}
           >
@@ -199,10 +213,10 @@ const DealsFilterModal = ({
             <span
               style={{
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '16px',
+                fontWeight: 500,
+                fontSize: '15px',
                 lineHeight: '20px',
-                color: '#1B2D45',
+                color: '#0F172A',
               }}
             >
               Money
@@ -215,7 +229,10 @@ const DealsFilterModal = ({
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              padding: '16px 0',
+              padding: '13px 14px',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
+              marginBottom: '10px',
               cursor: 'pointer',
             }}
           >
@@ -233,10 +250,10 @@ const DealsFilterModal = ({
             <span
               style={{
                 fontFamily: 'Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: '16px',
+                fontWeight: 500,
+                fontSize: '15px',
                 lineHeight: '20px',
-                color: '#1B2D45',
+                color: '#0F172A',
               }}
             >
               Both
@@ -250,7 +267,7 @@ const DealsFilterModal = ({
             display: 'flex',
             gap: '12px',
             padding: '16px 20px 24px',
-            borderTop: '1px solid #F2F2F7',
+            borderTop: '1px solid #D5DEEA',
           }}
         >
           <button
@@ -260,19 +277,19 @@ const DealsFilterModal = ({
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              padding: '10px 27px',
-              background: '#FFFFFF',
-              border: '1px solid #D1D5DB',
-              borderRadius: '20px',
-              boxShadow: '0px 0px 50px rgba(0, 0, 0, 0.05)',
+              padding: '12px 16px',
+              background: 'transparent',
+              border: '1px solid #D5DEEA',
+              borderRadius: '14px',
+              boxShadow: 'none',
               cursor: 'pointer',
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 400,
-              fontSize: '12px',
+              fontWeight: 600,
+              fontSize: '14px',
               lineHeight: '20px',
-              letterSpacing: '0.06em',
+              letterSpacing: '0.01em',
               textTransform: 'capitalize',
-              color: '#6B7280',
+              color: '#334155',
             }}
           >
             Reset
@@ -284,17 +301,17 @@ const DealsFilterModal = ({
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              padding: '10px 27px',
+              padding: '12px 16px',
               background: '#2563EB',
               border: '1px solid #2563EB',
-              borderRadius: '20px',
-              boxShadow: '0px 0px 50px rgba(0, 0, 0, 0.05)',
+              borderRadius: '14px',
+              boxShadow: 'none',
               cursor: 'pointer',
               fontFamily: 'Outfit, sans-serif',
-              fontWeight: 400,
-              fontSize: '12px',
+              fontWeight: 600,
+              fontSize: '14px',
               lineHeight: '20px',
-              letterSpacing: '0.06em',
+              letterSpacing: '0.01em',
               textTransform: 'capitalize',
               color: '#FFFFFF',
             }}

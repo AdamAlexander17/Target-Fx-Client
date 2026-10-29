@@ -1,3 +1,17 @@
+# Never let the browser reuse a stale app shell or service worker: after a deploy, index.html and
+# sw.js must always be revalidated, or users keep running the old build until they hard-refresh.
+# Built JS/CSS under /assets have content hashes in their names, so they can be cached forever.
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|sw\.js|registerSW\.js|manifest\.webmanifest|version\.json)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+  <If "%{REQUEST_URI} =~ m#^/assets/#">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </If>
+</IfModule>
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
