@@ -121,6 +121,17 @@ function RateSettings({ client = false, selection = {}, onClose, onSaved }) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [reload, setReload] = useState(0)
+  // What each exchange is charged at today for this login (method, rate, source), from the report
+  const current = useMemo(() => new Map((Array.isArray(selection.exchanges) ? selection.exchanges : [])
+    .filter(item => item && typeof item === 'object' && item.exchange)
+    .map(item => [item.exchange, item])), [selection.exchanges])
+  const methodName = method => method === 'lot' ? 'Per Lot' : method === 'crore' ? 'Per Crore' : ''
+  const sourceName = source => ({ client: 'client', group: 'group', broker: 'default exchange' }[source] || '')
+  const currentText = exchange => {
+    const item = current.get(exchange)
+    if (!item || !item.method || item.rate == null) return ''
+    return `${methodName(item.method)} · ${format(item.rate)}${sourceName(item.rate_source) ? ` (${sourceName(item.rate_source)})` : ''}`
+  }
   const filters = useMemo(() => (selection.login ? { login: selection.login } : {}), [selection.login])
 
   useEffect(() => {
@@ -145,7 +156,13 @@ function RateSettings({ client = false, selection = {}, onClose, onSaved }) {
         if (!Array.isArray(exchangeRows) || !Array.isArray(saved)) throw new Error('Invalid rate settings response. Please retry.')
         if (client && filters.login && Array.isArray(selection.exchanges)) {
           const scoped = calculatorClientRateScope(exchangeRows, saved, filters.login, selection.exchanges)
-          if (active) { setExchanges(scoped.exchanges); setOriginal(scoped.original); setRows(scoped.rows) }
+          const prefilled = scoped.rows.map(row => {
+            const now = current.get(row.exchange)
+            if (!row.fixed || !now?.method || now.rate == null) return row
+            const inherited = { method: now.method, rate: String(now.rate) }
+            return { ...row, ...inherited, inherited }
+          })
+          if (active) { setExchanges(scoped.exchanges); setOriginal(scoped.original); setRows(prefilled) }
           return
         }
         const editable = saved.map(row => ({ ...row, method: row.method ?? '', rate: row.rate ?? '' }))
@@ -161,15 +178,17 @@ function RateSettings({ client = false, selection = {}, onClose, onSaved }) {
     }
     load()
     return () => { active = false }
-  }, [client, filters, reload, selection.exchanges])
+  }, [client, filters, reload, selection.exchanges, current])
 
   const update = (index, key, value) => setRows(current => current.map((row, i) => i === index ? { ...row, [key]: value } : row))
-  const resetRow = index => setRows(current => current.map((row, i) => i === index ? { ...row, method: '', rate: '' } : row))
+  const resetRow = index => setRows(current => current.map((row, i) => i === index ? { ...row, method: row.inherited?.method ?? '', rate: row.inherited?.rate ?? '' } : row))
+  // A pre-filled row the broker left as it was is not a client rate (it keeps following the default / group)
+  const isInherited = row => !!row.inherited && row.method === row.inherited.method && String(row.rate ?? '').trim() === row.inherited.rate
   const save = async () => {
     setError('')
     try {
       const isBlank = row => !row.method && String(row.rate ?? '').trim() === ''
-      const changes = changedCalculatorRates(client ? rows.filter(row => !(row.fixed && isBlank(row))) : rows, original, client)
+      const changes = changedCalculatorRates(client ? rows.filter(row => !(row.fixed && (isBlank(row) || isInherited(row)))) : rows, original, client)
       if (!changes.length) { onClose(); return }
       setSaving(true)
       calculatorData(await (client ? brokerageCalcAPI.setClientRates(changes) : brokerageCalcAPI.setExchanges(changes)))
@@ -211,9 +230,9 @@ function RateSettings({ client = false, selection = {}, onClose, onSaved }) {
                 <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] items-end gap-2">
                   <label className="min-w-0"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">Method</span>
                     <MobileSelect ariaLabel={`Method ${index + 1}`} title="Method" disabled={saving} className="w-full" value={row.method} onChange={value => update(index, 'method', value)}
-                      options={[{ value: '', label: client ? 'Default' : 'Not set' }, { value: 'lot', label: 'Per Lot' }, { value: 'crore', label: 'Per Crore' }]} /></label>
+                      options={[{ value: '', label: client ? (methodName(current.get(row.exchange)?.method) ? `Default (${methodName(current.get(row.exchange)?.method)})` : 'Default') : 'Not set' }, { value: 'lot', label: 'Per Lot' }, { value: 'crore', label: 'Per Crore' }]} /></label>
                   <label className="min-w-0"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">Rate</span>
-                    <input aria-label={`Rate ${index + 1}`} disabled={saving} inputMode="decimal" className={`${rateInputCls} w-full tabular-nums`} placeholder={client ? 'Default' : 'Not set'} value={row.rate} onChange={event => update(index, 'rate', event.target.value)} /></label>
+                    <input aria-label={`Rate ${index + 1}`} disabled={saving} inputMode="decimal" className={`${rateInputCls} w-full tabular-nums`} placeholder={client ? (current.get(row.exchange)?.rate != null ? format(current.get(row.exchange).rate) : 'Default') : 'Not set'} value={row.rate} onChange={event => update(index, 'rate', event.target.value)} /></label>
                   <label className="min-w-0"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">Currency</span>
                     <span className="flex h-10 items-center">{currencyBadge(currency)}</span></label>
                 </div>
@@ -222,20 +241,21 @@ function RateSettings({ client = false, selection = {}, onClose, onSaved }) {
             })}
           </div>
           <div className="scrollbar-hide hidden overflow-x-auto rounded-lg border border-[#E5E7EB] sm:block">
-          <Table label={client ? 'Client rate settings' : 'Exchange rate settings'} stickySecond={false} headers={[...(client && !selection.login ? ['Login'] : []), 'Exchange', 'Method', 'Rate', 'Currency', 'Status', 'Actions']}>
+          <Table label={client ? 'Client rate settings' : 'Exchange rate settings'} stickySecond={false} headers={[...(client && !selection.login ? ['Login'] : []), 'Exchange', ...(client && current.size ? ['Current rate'] : []), 'Method', 'Rate', 'Currency', 'Status', 'Actions']}>
             <tbody>{rows.map((row, index) => {
               const persisted = row.fixed || original.some(item => item.exchange === row.exchange && (!client || String(item.login) === String(row.login)))
               const currency = client ? exchanges.find(item => item.exchange === row.exchange)?.currency : row.currency
-              const custom = client && (row.method || String(row.rate ?? '').trim() !== '')
+              const custom = client && !isInherited(row) && (row.method || String(row.rate ?? '').trim() !== '')
               return <tr key={index} className={`border-b border-[#E5E7EB] last:border-b-0 ${selection.exchange === row.exchange ? 'bg-blue-50' : custom ? 'bg-[#F8FAFF]' : ''}`}>
                 {client && !selection.login && <td className={`px-1.5 py-2 sm:px-3 sm:py-1.5 ${stickyRateTdCls}`}><input aria-label={`Login ${index + 1}`} readOnly={persisted} disabled={saving} inputMode="numeric" className={`${rateInputCls} w-20 tabular-nums read-only:border-transparent read-only:bg-transparent read-only:px-0 read-only:shadow-none sm:w-24`} value={row.login} onChange={event => update(index, 'login', event.target.value)} /></td>}
                 <td className={`whitespace-nowrap px-1.5 py-2 text-xs sm:px-3 sm:py-1.5 sm:text-[13px] ${client ? '' : stickyRateTdCls}`}>{client && !persisted ? <select aria-label={`Exchange ${index + 1}`} disabled={saving} className={`${rateInputCls} w-28 sm:w-36`} value={row.exchange} onChange={event => update(index, 'exchange', event.target.value)}>
                   <option value="">Choose exchange</option>{exchanges.map(item => <option key={item.exchange}>{item.exchange}</option>)}
                 </select> : <span className="font-semibold text-[#0F172A]">{row.exchange}</span>}</td>
+                {client && current.size > 0 && <td className="whitespace-nowrap px-1.5 py-2 text-[12px] text-slate-600 sm:px-3 sm:py-1.5">{currentText(row.exchange) || <span className="text-amber-700">Not set</span>}</td>}
                 <td className="px-1.5 py-2 sm:px-3 sm:py-1.5"><select aria-label={`Method ${index + 1}`} disabled={saving} className={`${rateInputCls} w-[138px] sm:!h-8 sm:w-32 sm:!text-[13px]`} value={row.method} onChange={event => update(index, 'method', event.target.value)}>
-                  <option value="">{client ? 'Default' : 'Not set'}</option><option value="lot">Per Lot</option><option value="crore">Per Crore</option>
+                  <option value="">{client ? (methodName(current.get(row.exchange)?.method) ? `Default (${methodName(current.get(row.exchange)?.method)})` : 'Default') : 'Not set'}</option><option value="lot">Per Lot</option><option value="crore">Per Crore</option>
                 </select></td>
-                <td className="px-1.5 py-2 sm:px-3 sm:py-1.5"><input aria-label={`Rate ${index + 1}`} disabled={saving} inputMode="decimal" className={`${rateInputCls} w-28 tabular-nums sm:!h-8 sm:w-24 sm:!text-[13px]`} placeholder={client ? 'Default' : 'Not set'} value={row.rate} onChange={event => update(index, 'rate', event.target.value)} /></td>
+                <td className="px-1.5 py-2 sm:px-3 sm:py-1.5"><input aria-label={`Rate ${index + 1}`} disabled={saving} inputMode="decimal" className={`${rateInputCls} w-28 tabular-nums sm:!h-8 sm:w-24 sm:!text-[13px]`} placeholder={client ? (current.get(row.exchange)?.rate != null ? format(current.get(row.exchange).rate) : 'Default') : 'Not set'} value={row.rate} onChange={event => update(index, 'rate', event.target.value)} /></td>
                 <td className="px-1.5 py-2 sm:px-3 sm:py-1.5">{currencyBadge(currency)}</td>
                 <td className="whitespace-nowrap px-1.5 py-2 sm:px-3 sm:py-1.5">{(client ? custom : row.configured)
                   ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-[#2563EB]">{client ? 'Custom' : 'Set'}</span>
