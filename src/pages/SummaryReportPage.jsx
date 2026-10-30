@@ -21,6 +21,9 @@ import ClientDetailsMobileModal from '../components/ClientDetailsMobileModal'
 import PageSizeSelect from '../components/PageSizeSelect'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ColumnChooserList from '../components/ColumnChooserList'
+import ColumnFilterMenu from '../components/ColumnFilterMenu'
+import ColumnFilterTrigger from '../components/ColumnFilterTrigger'
+import useColumnFilters from '../hooks/useColumnFilters'
 import { serverNowDate, serverEpochFromParts, fromServerEpoch } from '../utils/dateFormatter'
 import DateInputDMY from '../components/DateInputDMY'
 import { exportStyledExcel } from '../utils/exportStyledExcel'
@@ -282,6 +285,20 @@ const SummaryReportPage = () => {
   const effectivePageSize = isMobile ? MOBILE_PAGE_SIZE : pageSize
   const [sortBy, setSortBy] = useState('login')
   const [sortOrder, setSortOrder] = useState('asc')
+  const {
+    filters: columnFilters,
+    requestFilters: columnRequestFilters,
+    openColumn: openFilterColumn,
+    openMenu: openColumnFilter,
+    closeMenu: closeColumnFilter,
+    setFilter: applyColumnFilter,
+    clearFilter: clearColumnFilterRaw,
+  } = useColumnFilters()
+  const filterRefs = useRef({})
+  const clearColumnFilter = columnKey => {
+    clearColumnFilterRaw(columnKey)
+    setPage(1)
+  }
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -305,6 +322,7 @@ const SummaryReportPage = () => {
     const body = { sortBy, sortOrder }
     if (activeGroup) body.mt5Accounts = [...new Set(getGroupLogins(activeGroup.name).map(Number).filter(Number.isFinite))]
     if (search) body.search = search
+    if (columnRequestFilters.length) body.filters = columnRequestFilters
     return body
   }
 
@@ -342,7 +360,7 @@ const SummaryReportPage = () => {
     load()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range, search, isAuthenticated, page, effectivePageSize, sortBy, sortOrder, reloadKey, groupKey])
+  }, [range, search, isAuthenticated, page, effectivePageSize, sortBy, sortOrder, reloadKey, groupKey, columnRequestFilters])
 
   const totalPages = Math.max(1, Math.ceil(total / effectivePageSize))
   // When the on-screen keyboard has shrunk the visible viewport, let the mobile column-picker
@@ -355,6 +373,21 @@ const SummaryReportPage = () => {
     else { setSortBy(key); setSortOrder('asc') }
     setPage(1)
   }
+  const sortColumnBy = (key, direction) => {
+    setSortBy(key)
+    setSortOrder(direction)
+    setPage(1)
+  }
+  const filterIconFor = (column, mobile = false) => (
+    <ColumnFilterTrigger
+      columnKey={column.key}
+      label={column.label}
+      filterRef={node => { filterRefs.current[column.key] = node }}
+      active={Boolean(columnFilters[`${column.key}_custom`])}
+      onClick={openColumnFilter}
+      className={mobile ? 'ml-1 !h-4 !w-4' : 'ml-1'}
+    />
+  )
 
   const handlePreset = (value) => {
     const next = getPresetRange(value)
@@ -692,6 +725,7 @@ const SummaryReportPage = () => {
                       <div key={column.key} onClick={() => handleSort(column.key)} className={`h-[32px] flex items-center px-1 cursor-pointer select-none ${isMobilePinned(column) ? 'sticky z-30 bg-blue-500 px-2' : ''}`} style={mobilePinStyle(column)}>
                         <span className="truncate">{column.label}</span>
                         {sortBy === column.key && <span className="ml-1">{sortOrder === 'asc' ? '↑' : '↓'}</span>}
+                        <span onClick={event => event.stopPropagation()}>{filterIconFor(column, true)}</span>
                       </div>
                     ))}
                   </div>
@@ -838,10 +872,13 @@ const SummaryReportPage = () => {
                       <tr>
                         {shownColumns.map(column => (
                           <th key={column.key} className="px-3 py-2.5 text-left text-[11px] font-bold text-white uppercase tracking-wider whitespace-nowrap bg-blue-600 hover:bg-blue-700 transition-colors select-none border-r border-blue-400 last:border-r-0">
-                            <button type="button" onClick={() => handleSort(column.key)} className="inline-flex items-center gap-1 uppercase">
-                              {column.label}
-                              {sortBy === column.key && <span className="text-[9px]" aria-hidden="true">{sortOrder === 'asc' ? '▲' : '▼'}</span>}
-                            </button>
+                            <span className="inline-flex items-center">
+                              <button type="button" onClick={() => handleSort(column.key)} className="inline-flex items-center gap-1 uppercase">
+                                {column.label}
+                                {sortBy === column.key && <span className="text-[9px]" aria-hidden="true">{sortOrder === 'asc' ? '▲' : '▼'}</span>}
+                              </button>
+                              {filterIconFor(column)}
+                            </span>
                           </th>
                         ))}
                       </tr>
@@ -915,6 +952,23 @@ const SummaryReportPage = () => {
       ))}
 
       {isMobile && datePickerOpen && createPortal(datePickerPopover, document.body)}
+      {openFilterColumn && (() => {
+        const column = COLUMNS.find(item => item.key === openFilterColumn)
+        if (!column) return null
+        return (
+          <ColumnFilterMenu
+            label={column.label}
+            kind={column.numeric ? 'number' : 'text'}
+            value={columnFilters[`${column.key}_custom`] || null}
+            sortDirection={sortBy === column.key ? sortOrder : null}
+            onSort={direction => sortColumnBy(column.key, direction)}
+            onClear={() => clearColumnFilter(column.key)}
+            onApply={filter => { applyColumnFilter(column.key, filter); setPage(1) }}
+            onClose={closeColumnFilter}
+            anchorRef={{ current: filterRefs.current[column.key] }}
+          />
+        )
+      })()}
       {isMobile && (
         <>
           <CustomizeViewModal

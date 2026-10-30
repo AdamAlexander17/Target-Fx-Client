@@ -16,6 +16,10 @@ import CustomizeViewModal from '../components/CustomizeViewModal'
 import LoginGroupsModal from '../components/LoginGroupsModal'
 import LoginGroupModal from '../components/LoginGroupModal'
 import PageSizeSelect from '../components/PageSizeSelect'
+import ColumnFilterMenu from '../components/ColumnFilterMenu'
+import ColumnFilterTrigger from '../components/ColumnFilterTrigger'
+import useColumnFilters from '../hooks/useColumnFilters'
+import { rowFieldValue } from '../utils/columnFilters'
 import ExchangeBreakdownModal from '../components/ExchangeBreakdownModal'
 import { formatDate } from '../utils/dateFormatter'
 
@@ -134,6 +138,7 @@ const ReportsExchangePage = () => {
 
   const [data, setData] = useState(null) // full response.data
   const [loading, setLoading] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const [error, setError] = useState('')
   const [showGroupModal, setShowGroupModal] = useState(false)
   const [editingGroup, setEditingGroup] = useState(null)
@@ -147,6 +152,22 @@ const ReportsExchangePage = () => {
   const [dateError, setDateError] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState('login')
+  const [sortOrder, setSortOrder] = useState('asc')
+  const {
+    filters: columnFilters,
+    requestFilters: columnRequestFilters,
+    openColumn: openFilterColumn,
+    openMenu: openColumnFilter,
+    closeMenu: closeColumnFilter,
+    setFilter: applyColumnFilterRaw,
+    clearFilter: clearColumnFilterRaw,
+    filterRows,
+    sortRows,
+  } = useColumnFilters()
+  const filterRefs = useRef({})
+  const applyColumnFilter = (key, filter) => { applyColumnFilterRaw(key, filter); setCurrentPage(1) }
+  const clearColumnFilter = key => { clearColumnFilterRaw(key); setCurrentPage(1) }
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(100)
   const [exporting, setExporting] = useState(false)
@@ -220,6 +241,9 @@ const ReportsExchangePage = () => {
           ...dateFilters,
           ...getExchangeGroupFilters(activeGroup),
           ...(search ? { search } : {}),
+          ...(columnRequestFilters.length ? { filters: columnRequestFilters } : {}),
+          sortBy,
+          sortOrder,
           page: currentPage,
           limit: pageSize
         })
@@ -236,7 +260,7 @@ const ReportsExchangePage = () => {
     }
     load()
     return () => { cancelled = true }
-  }, [activeGroup, appliedFromDate, appliedToDate, search, currentPage, isAuthenticated, pageSize, selectedWeekId])
+  }, [activeGroup, appliedFromDate, appliedToDate, search, currentPage, isAuthenticated, pageSize, selectedWeekId, sortBy, sortOrder, columnRequestFilters, reloadKey])
 
   useSearchAsYouType(searchInput, search, setSearch, setCurrentPage)
 
@@ -282,12 +306,20 @@ const ReportsExchangePage = () => {
   }
 
   const rawClients = data?.Clients ?? data?.clients ?? data?.Client ?? data?.client ?? []
-  const clients = Array.isArray(rawClients) ? rawClients : []
+  const clients = useMemo(() => Array.isArray(rawClients) ? rawClients : [], [rawClients])
+  const exchangeValue = (row, key) => {
+    if (key === 'login') return rowFieldValue(row, 'login', ['mt5Account'])
+    if (key === 'name') return rowFieldValue(row, 'name', ['clientName'])
+    if (key === 'agent_commission') return rowFieldValue(row, 'agentCommission', ['agent_commission'])
+    return rowFieldValue(row, key)
+  }
+  const filteredClients = filterRows(clients, exchangeValue)
+  const pagedClients = sortRows(filteredClients, exchangeValue, sortBy, sortOrder)
   const settlementWeek = data?.SettlementWeek ?? data?.settlementWeek ?? null
   const responseTotals = data?.Totals ?? data?.totals ?? null
   const responsePagination = data?.Pagination ?? data?.pagination ?? null
 
-  const totalClients = Number(
+  const totalClients = Object.keys(columnFilters).length ? pagedClients.length : Number(
     responsePagination?.total ??
     responsePagination?.total_items ??
     responsePagination?.totalItems ??
@@ -299,7 +331,6 @@ const ReportsExchangePage = () => {
     responsePagination?.pages ??
     Math.ceil(totalClients / pageSize)
   ) || 1)
-  const pagedClients = clients
 
   useEffect(() => {
     setCurrentPage(1)
@@ -356,7 +387,7 @@ const ReportsExchangePage = () => {
     }
 
     let agentCommission = 0
-    clients.forEach(c => {
+    pagedClients.forEach(c => {
       agentCommission += Number(c.AgentCommission || 0)
       ;(c.Exchanges || []).forEach(e => {
         const name = e.Exchange || 'UNKNOWN'
@@ -373,6 +404,23 @@ const ReportsExchangePage = () => {
   const getExchange = (client, name) => {
     return (client.Exchanges || []).find(e => (e.Exchange || 'UNKNOWN') === name) || null
   }
+
+  const sortColumnBy = (key, direction) => {
+    setSortBy(key)
+    setSortOrder(direction)
+    setCurrentPage(1)
+  }
+  const filterIconFor = (key, label, kind = 'text', mobile = false) => (
+    <ColumnFilterTrigger
+      columnKey={key}
+      label={label}
+      filterRef={node => { filterRefs.current[key] = node }}
+      active={Boolean(columnFilters[`${key}_custom`])}
+      onClick={openColumnFilter}
+      className={mobile ? 'ml-1 !h-4 !w-4' : 'ml-1'}
+      data-kind={kind}
+    />
+  )
 
   // Fetch a single login's exchange breakdown via POST /api/broker/exchange-data
   const fetchExchangeForLogin = async (login) => {
@@ -404,6 +452,9 @@ const ReportsExchangePage = () => {
         ...dateFilters,
         ...getExchangeGroupFilters(activeGroup),
         ...(search ? { search } : {}),
+        ...(columnRequestFilters.length ? { filters: columnRequestFilters } : {}),
+        sortBy,
+        sortOrder,
         limit: 500
       }
       const exportClients = []
@@ -633,7 +684,7 @@ const ReportsExchangePage = () => {
 
             <div className="hidden sm:flex items-center gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex min-w-0 items-center justify-between gap-3"><h1 className="text-base sm:text-xl font-bold text-[#1A1A1A] leading-tight">Reports · Brokerage Data</h1><BrokerCreditSummary variant="header" /></div>
+                <div className="flex min-w-0 items-center justify-between gap-3"><h1 className="text-base sm:text-xl font-bold text-[#1A1A1A] leading-tight">Brokerage Data</h1><BrokerCreditSummary variant="header" /></div>
               </div>
 
               <div className="hidden sm:flex flex-nowrap items-center gap-2 flex-shrink-0">
@@ -743,6 +794,17 @@ const ReportsExchangePage = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
                   </svg>
                   {exporting ? 'Exporting...' : 'Export CSV'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setReloadKey(value => value + 1)}
+                  disabled={loading}
+                  title="Refresh"
+                  aria-label="Refresh brokerage data"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-white text-gray-500 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50"
+                >
+                  <svg aria-hidden="true" className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
                 </button>
               </div>
             </div>
@@ -977,9 +1039,9 @@ const ReportsExchangePage = () => {
                   <table className="min-w-full text-xs border-separate border-spacing-0">
                   <thead className="sticky top-0 z-20">
                     <tr>
-                      <th rowSpan={2} className="relative z-30 bg-blue-600 text-white px-3 py-3 text-left font-semibold uppercase tracking-wide text-[11px] border-r border-blue-500/60 sticky left-0">Login</th>
-                      <th rowSpan={2} className="bg-blue-600 text-white px-3 py-3 text-left font-semibold uppercase tracking-wide text-[11px] border-r border-blue-500/60">Name</th>
-                      <th rowSpan={2} className="bg-blue-600 text-white px-3 py-3 text-right font-semibold uppercase tracking-wide text-[11px] border-r border-blue-500/60">Agent Commission</th>
+                      <th rowSpan={2} className="relative z-30 bg-blue-600 text-white px-3 py-3 text-left font-semibold uppercase tracking-wide text-[11px] border-r border-blue-500/60 sticky left-0"><span className="inline-flex items-center">Login{filterIconFor('login', 'Login')}</span></th>
+                      <th rowSpan={2} className="bg-blue-600 text-white px-3 py-3 text-left font-semibold uppercase tracking-wide text-[11px] border-r border-blue-500/60"><span className="inline-flex items-center">Name{filterIconFor('name', 'Name')}</span></th>
+                      <th rowSpan={2} className="bg-blue-600 text-white px-3 py-3 text-right font-semibold uppercase tracking-wide text-[11px] border-r border-blue-500/60"><span className="inline-flex items-center">Agent Commission{filterIconFor('agent_commission', 'Agent Commission', 'number')}</span></th>
                       {exchangeColumns.map(name => (
                         <th key={name} colSpan={3} className="bg-blue-600 text-white px-3 py-2 text-center font-semibold uppercase tracking-wide text-[11px] border-r-2 border-r-[#94A3B8] border-b border-white/25">
                           {name}
@@ -1073,6 +1135,28 @@ const ReportsExchangePage = () => {
           <MobileBottomNav onMore={() => setSidebarOpen(true)} />
         </div>
       </main>
+
+      {openFilterColumn && (() => {
+        const column = [
+          { key: 'login', label: 'Login', kind: 'text' },
+          { key: 'name', label: 'Name', kind: 'text' },
+          { key: 'agent_commission', label: 'Agent Commission', kind: 'number' },
+        ].find(item => item.key === openFilterColumn)
+        if (!column) return null
+        return (
+          <ColumnFilterMenu
+            label={column.label}
+            kind={column.kind}
+            value={columnFilters[`${column.key}_custom`] || null}
+            sortDirection={sortBy === column.key ? sortOrder : null}
+            onSort={direction => sortColumnBy(column.key, direction)}
+            onClear={() => clearColumnFilter(column.key)}
+            onApply={filter => applyColumnFilter(column.key, filter)}
+            onClose={closeColumnFilter}
+            anchorRef={{ current: filterRefs.current[column.key] }}
+          />
+        )
+      })()}
 
       <div className="sm:hidden">
         <CustomizeViewModal

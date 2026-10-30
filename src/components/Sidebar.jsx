@@ -197,7 +197,7 @@ const Sidebar = ({ isOpen, onClose, onToggle, marginLevelCount = 0, mobileOnly =
               onPointerMove={drawerTapGuard.onPointerMove}
               onPointerCancel={drawerTapGuard.onPointerCancel}
               onClickCapture={drawerTapGuard.onClickCapture}
-              className="flex-1 overflow-auto py-2"
+              className="scrollbar-hide flex-1 overflow-auto py-2"
             >
               <div className="px-3 pb-3 pt-1">
                 <p className="text-[9px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1.5 px-1">Display Mode</p>
@@ -302,22 +302,22 @@ const Sidebar = ({ isOpen, onClose, onToggle, marginLevelCount = 0, mobileOnly =
           hidden lg:flex fixed inset-y-0 left-0 z-50 lg:z-auto
           w-64 bg-white
           border-r border-slate-200 shadow-lg
-          transform transition-transform duration-300 ease-in-out
+          transform transition-[width,transform] duration-300 ease-in-out
           lg:flex-col h-screen overflow-visible
           ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
           ${isOpen ? 'lg:w-60' : 'lg:w-16'}
         `}
       >
-        {/* Toggle Button - Positioned on the right edge of sidebar */}
+        {/* Toggle Button - whole area clickable */}
         <button
           onClick={() => typeof onToggle === 'function' && onToggle()}
-          className="hidden lg:block absolute -right-3 top-6 z-50 w-6 h-6 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-all duration-200 transform hover:scale-110"
+          className="hidden lg:flex absolute -right-3 top-6 z-50 h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-colors duration-200 hover:bg-blue-700"
           title={isOpen ? "Close sidebar" : "Open sidebar"}
         >
-          <svg 
-            className={`w-4 h-4 mx-auto transition-transform duration-300 ${isOpen ? '' : 'rotate-180'}`} 
-            fill="none" 
-            stroke="currentColor" 
+          <svg
+            className={`w-4 h-4 transition-transform duration-300 ${isOpen ? '' : 'rotate-180'}`}
+            fill="none"
+            stroke="currentColor"
             viewBox="0 0 24 24"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -375,7 +375,7 @@ const Sidebar = ({ isOpen, onClose, onToggle, marginLevelCount = 0, mobileOnly =
           <nav
             ref={desktopNavRef}
             onScroll={event => { if (event.currentTarget.clientHeight) sidebarViewState.scrollTop[desktopScrollKey] = event.currentTarget.scrollTop }}
-            className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 py-4"
+            className="scrollbar-hide min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 py-4"
           >
             {navigationItems.map((item) => {
               if (item.children) {

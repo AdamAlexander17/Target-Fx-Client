@@ -1,7 +1,7 @@
 import BrokerCreditSummary from '../components/BrokerCreditSummary'
 import QuickTimeFilter from '../components/QuickTimeFilter'
 import { getPresetRange, QUICK_FILTERS } from '../utils/dealTimePresets'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { brokerAPI } from '../services/api'
 import { useAuth } from '../contexts/authContextStore'
@@ -21,7 +21,10 @@ import ClientDetailsMobileModal from '../components/ClientDetailsMobileModal'
 import PageSizeSelect from '../components/PageSizeSelect'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ColumnChooserList from '../components/ColumnChooserList'
-import { formatTime as apiFormatTime, serverNowDate, serverEpochFromParts, fromServerEpoch } from '../utils/dateFormatter'
+import ColumnFilterMenu from '../components/ColumnFilterMenu'
+import ColumnFilterTrigger from '../components/ColumnFilterTrigger'
+import useColumnFilters from '../hooks/useColumnFilters'
+import { formatTime as apiFormatTime, serverNowDate, serverEpochFromParts, fromServerEpoch, toApiEpoch } from '../utils/dateFormatter'
 import DateInputDMY from '../components/DateInputDMY'
 import { exportStyledExcel, actionColor } from '../utils/exportStyledExcel'
 
@@ -265,6 +268,50 @@ const DealsReportPage = () => {
   const effectivePageSize = isMobile ? MOBILE_PAGE_SIZE : pageSize
   const [sortBy, setSortBy] = useState('time')
   const [sortOrder, setSortOrder] = useState('desc')
+  const {
+    filters: columnFilters,
+    requestFilters: columnRequestFiltersRaw,
+    openColumn: openFilterColumn,
+    openMenu: openColumnFilter,
+    closeMenu: closeColumnFilter,
+    setFilter: applyColumnFilterRaw,
+    clearFilter: clearColumnFilterRaw,
+  } = useColumnFilters()
+  // Memoized: a fresh array each render would retrigger the load effect endlessly.
+  const columnRequestFilters = useMemo(
+    () => columnRequestFiltersRaw.filter(item => item.field !== 'time'),
+    [columnRequestFiltersRaw]
+  )
+  const applyColumnFilter = (columnKey, filter) => {
+    applyColumnFilterRaw(columnKey, filter)
+    if (columnKey === 'time') {
+      // The API reads from/to as standard unix epochs; picked wall-clock
+      // fields must be shifted back by the server offset or the window
+      // lands hours away from the deals shown in the table.
+      const from = toApiEpoch(filter.value1)
+      const to = toApiEpoch(filter.type === 'between' ? filter.value2 : filter.value1)
+      if (filter.type === 'between') setRange({ from, to })
+      else if (filter.type === 'greaterThanOrEqual') setRange(previous => ({ ...previous, from }))
+      else if (filter.type === 'lessThanOrEqual') setRange(previous => ({ ...previous, to }))
+      else if (filter.type === 'equal') setRange({ from, to })
+      // notEqual cannot be expressed as a single range; leave the range unchanged.
+    }
+    setPage(1)
+  }
+  const filterRefs = useRef({})
+  const clearColumnFilter = columnKey => {
+    clearColumnFilterRaw(columnKey)
+    if (columnKey === 'time') {
+      // Restore the active date range so clearing TIME really un-filters.
+      if (preset === 'custom' && customFrom && customTo) {
+        setRange({ from: ymdToEpoch(customFrom), to: ymdToEpoch(customTo, true) })
+      } else {
+        const next = getPresetRange(preset)
+        if (next) setRange(next)
+      }
+    }
+    setPage(1)
+  }
   const [deals, setDeals] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -323,6 +370,7 @@ const DealsReportPage = () => {
       filters.push({ field: 'action', operator: 'not_equal', value: 'BUY' })
       filters.push({ field: 'action', operator: 'not_equal', value: 'SELL' })
     }
+    filters.push(...columnRequestFilters)
     if (filters.length) body.filters = filters
     return body
   }
@@ -361,7 +409,7 @@ const DealsReportPage = () => {
     load()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range, search, moduleFilter, isAuthenticated, page, effectivePageSize, sortBy, sortOrder, reloadKey, groupKey])
+  }, [range, search, moduleFilter, isAuthenticated, page, effectivePageSize, sortBy, sortOrder, reloadKey, groupKey, columnRequestFilters])
 
   const totalPages = Math.max(1, Math.ceil(total / effectivePageSize))
 
@@ -370,6 +418,21 @@ const DealsReportPage = () => {
     else { setSortBy(key); setSortOrder('desc') }
     setPage(1)
   }
+  const sortColumnBy = (key, direction) => {
+    setSortBy(key)
+    setSortOrder(direction)
+    setPage(1)
+  }
+  const filterIconFor = (column, mobile = false) => (
+    <ColumnFilterTrigger
+      columnKey={column.key}
+      label={column.label}
+      filterRef={node => { filterRefs.current[column.key] = node }}
+      active={Boolean(columnFilters[`${column.key}_custom`])}
+      onClick={openColumnFilter}
+      className={mobile ? 'ml-1 !h-4 !w-4' : 'ml-1'}
+    />
+  )
 
   const handlePreset = (value) => {
     const next = getPresetRange(value)
@@ -722,6 +785,7 @@ const DealsReportPage = () => {
                       <div key={column.key} onClick={() => handleSort(column.key)} className={`h-[32px] flex items-center px-1 cursor-pointer select-none ${isMobilePinned(column) ? 'sticky z-30 bg-blue-500 px-2' : ''}`} style={mobilePinStyle(column)}>
                         <span className="truncate">{column.label}</span>
                         {sortBy === column.key && <span className="ml-1">{sortOrder === 'asc' ? '↑' : '↓'}</span>}
+                        <span onClick={event => event.stopPropagation()}>{filterIconFor(column, true)}</span>
                       </div>
                     ))}
                   </div>
@@ -871,10 +935,13 @@ const DealsReportPage = () => {
                       <tr>
                         {shownColumns.map(column => (
                           <th key={column.key} style={pinStyle(column.key, true)} className="px-3 py-2.5 text-left text-[11px] font-bold text-white uppercase tracking-wider whitespace-nowrap bg-blue-600 hover:bg-blue-700 transition-colors select-none border-r border-blue-400 last:border-r-0">
-                            <button type="button" onClick={() => handleSort(column.key)} className="inline-flex items-center gap-1 uppercase">
-                              {column.label}
-                              {sortBy === column.key && <span className="text-[9px]" aria-hidden="true">{sortOrder === 'asc' ? '▲' : '▼'}</span>}
-                            </button>
+                            <span className="inline-flex items-center">
+                              <button type="button" onClick={() => handleSort(column.key)} className="inline-flex items-center gap-1 uppercase">
+                                {column.label}
+                                {sortBy === column.key && <span className="text-[9px]" aria-hidden="true">{sortOrder === 'asc' ? '▲' : '▼'}</span>}
+                              </button>
+                              {filterIconFor(column)}
+                            </span>
                           </th>
                         ))}
                       </tr>
@@ -884,7 +951,7 @@ const DealsReportPage = () => {
                         <tr key={`sk-${row}`} className={row % 2 ? 'bg-[#F9FAFB]' : 'bg-white'}>
                           {shownColumns.map(column => (
                             <td key={column.key} style={pinStyle(column.key, false, row % 2 ? '#F9FAFB' : '#ffffff')} className="px-3 py-3 border-b border-r border-[#E5E7EB] last:border-r-0">
-                              <div className="h-3.5 min-w-[48px] rounded bg-gray-200 animate-pulse" style={{ width: column.key === 'comment' || column.key === 'time' ? 110 : 64 }} />
+                              <div className="h-3.5 min-w-[48px] rounded bg-gray-200 animate-pulse" style={{ width: column.key === 'comment' || column.key === 'time' ? 110 : 64, minWidth: 48 }} />
                             </td>
                           ))}
                         </tr>
@@ -933,6 +1000,23 @@ const DealsReportPage = () => {
       ))}
 
       {isMobile && datePickerOpen && createPortal(datePickerPopover, document.body)}
+      {openFilterColumn && (() => {
+        const column = COLUMNS.find(item => item.key === openFilterColumn)
+        if (!column) return null
+        return (
+          <ColumnFilterMenu
+            label={column.label}
+            kind={column.key === 'time' ? 'date' : column.numeric ? 'number' : 'text'}
+            value={columnFilters[`${column.key}_custom`] || null}
+            sortDirection={sortBy === column.key ? sortOrder : null}
+            onSort={direction => sortColumnBy(column.key, direction)}
+            onClear={() => clearColumnFilter(column.key)}
+            onApply={filter => { applyColumnFilter(column.key, filter); setPage(1) }}
+            onClose={closeColumnFilter}
+            anchorRef={{ current: filterRefs.current[column.key] }}
+          />
+        )
+      })()}
       {isMobile && (
         <>
           <CustomizeViewModal

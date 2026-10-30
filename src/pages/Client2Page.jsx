@@ -1605,8 +1605,9 @@ const Client2Page = () => {
       refetchTimerRef.current = null
     }, 200)
     return () => {
-      requestIdRef.current++
-      abortControllerRef.current?.abort()
+      // Only cancel the pending debounce here. Do NOT abort the in-flight request:
+      // on first mount several deps settle in quick succession, and aborting the
+      // still-running initial fetch is what left the table empty until a hard refresh.
       if (refetchTimerRef.current) {
         clearTimeout(refetchTimerRef.current)
         refetchTimerRef.current = null
@@ -3413,12 +3414,13 @@ const Client2Page = () => {
         }}
       />
 
-      <main className={`flex-1 p-2 sm:p-4 lg:p-6 overflow-x-hidden overflow-y-auto no-page-scrollbar relative z-10 transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'}`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-        <div className="max-w-full mx-auto h-full flex flex-col min-h-0">
-          {/* Header Section */}
+      <main className={`flex-1 p-2 sm:p-4 lg:p-6 overflow-hidden flex flex-col no-page-scrollbar relative z-10 transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'}`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="max-w-full mx-auto w-full flex flex-col flex-1 min-h-0">
+          {/* Header Section — fixed above the scrollable content */}
+          <div className="shrink-0">
           <div className="bg-white rounded-2xl shadow-sm px-3 sm:px-6 py-3 mb-4 sm:mb-6">
             {/* Title + Actions */}
-            <div className="mb-2.5 pb-2.5 flex items-center justify-between gap-3">
+            <div className="mb-1.5 pb-1.5 flex items-center justify-between gap-3">
               <div>
                 <div className="flex min-w-0 flex-1 items-center justify-between gap-3"><h1 className="text-xl font-bold text-[#1A1A1A] min-w-0 max-sm:text-sm">Clients</h1><BrokerCreditSummary variant="header" /></div>
                 <p className="text-xs text-[#6B7280] mt-0.5">Manage and view all client accounts...</p>
@@ -3837,7 +3839,10 @@ const Client2Page = () => {
 
 <BrokerCreditSummary variant="desktop-header" />
 </div>
+          </div>
 
+          {/* Scrollable content: face cards + table */}
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           {/* 6 Face Cards - matching Positions module style */}
           {showFaceCards && (initialLoad || (totals && Object.keys(totals).length > 0) || (totalsPercent && Object.keys(totalsPercent).length > 0)) && (
             <div className="mb-6">
@@ -5282,6 +5287,7 @@ const Client2Page = () => {
                 </div>
               </div>
             )}
+          </div>
           </div>
         </div>
       </main>

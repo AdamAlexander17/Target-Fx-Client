@@ -205,17 +205,18 @@ const GraphicalAnalyticsPage = () => {
   }, [clients])
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className="flex h-[100dvh] overflow-hidden bg-gray-50">
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => { setSidebarOpen(false); try { localStorage.setItem('sidebarOpen', JSON.stringify(false)) } catch { /* Retain the fallback when this operation is unavailable. */ } }}
         onToggle={() => setSidebarOpen(v => { const n = !v; try { localStorage.setItem('sidebarOpen', JSON.stringify(n)) } catch { /* Retain the fallback when this operation is unavailable. */ }; return n })}
       />
 
-      <main className={`flex-1 p-4 lg:p-6 transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'} overflow-x-hidden`}>
+      <main className={`flex-1 p-4 lg:p-6 transition-all duration-300 ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'} overflow-y-auto overflow-x-hidden`}>
         <div className="max-w-[1600px] mx-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
+          {/* Header — pinned while the page scrolls */}
+          <div className="sticky top-0 z-40 -mx-4 -mt-4 bg-gray-50 px-4 pt-4 pb-6 lg:-mx-6 lg:-mt-6 lg:px-6 lg:pt-6">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -245,6 +246,7 @@ const GraphicalAnalyticsPage = () => {
               </svg>
               Back
             </button>
+          </div>
           </div>
 
           {/* Time Period Filter */}

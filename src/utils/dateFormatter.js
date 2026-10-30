@@ -45,6 +45,17 @@ export const toServerEpoch = (date) =>
 export const serverNowEpoch = () => Math.floor(Date.now() / 1000) + SERVER_UTC_OFFSET_SEC
 
 /**
+ * Epoch to SEND to the broker API for a picked server wall-clock time.
+ * The API treats from/to as standard unix epochs (the AI service sends
+ * datetime(..., tzinfo=server_tz).timestamp()), while picked/displayed values
+ * are server wall-clock fields, so shift back by the configured offset.
+ */
+export const toApiEpoch = (wallEpoch) => {
+  const n = Number(wallEpoch)
+  return Number.isFinite(n) ? n - SERVER_UTC_OFFSET_SEC : wallEpoch
+}
+
+/**
  * A local Date whose wall clock equals the server's current wall clock.
  * Use in place of `new Date()` when computing date ranges ("today",
  * "this month", ...) and pass the results through toServerEpoch().

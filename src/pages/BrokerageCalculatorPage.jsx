@@ -106,7 +106,7 @@ function Amount({ row, field }) {
 
 function Table({ headers, children, label, columnWidths, stickySecond = false, stickySecondTh = stickySecondThCls, headerStyle }) {
   return <div className="scrollbar-hide max-h-[60vh] overflow-auto sm:max-h-[65vh]">
-    <table aria-label={label} className={`w-full border-collapse bg-white max-sm:bg-transparent max-sm:border-separate max-sm:border-spacing-0 max-sm:[&_tbody_td]:border-b max-sm:[&_tbody_td]:border-[#E1E1E1] font-outfit text-sm text-[#374151] [&_tbody]:text-[#374151] [&_tfoot]:text-[#374151] ${columnWidths ? 'min-w-[800px] table-fixed' : ''}`}>
+    <table aria-label={label} className={`w-full border-collapse bg-white max-sm:bg-transparent max-sm:border-separate max-sm:border-spacing-0 max-sm:[&_tbody_td]:border-b max-sm:[&_tbody_td]:border-[#E1E1E1] font-outfit text-sm text-[#374151] [&_tbody]:text-[#374151] [&_tfoot]:text-[#374151] [&_th]:border-r [&_th]:border-blue-500/50 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-[#ECECEC] [&_td:last-child]:border-r-0 ${columnWidths ? 'min-w-[800px] table-fixed' : ''}`}>
       {columnWidths && <colgroup>{columnWidths.map((width, index) => <col key={headers[index]} style={{ width }} />)}</colgroup>}
       <thead className="sticky top-0 z-10 shadow-[0_1px_0_#E5E7EB] max-sm:shadow-[0_2px_6px_rgba(37,99,235,0.25)] max-sm:[transform:translateZ(0)]"><tr className="bg-blue-600 text-left max-sm:bg-blue-500">{headers.map((header, index) => <th key={header} style={headerStyle?.(index)} className={`whitespace-nowrap bg-blue-600 max-sm:bg-blue-500 px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-white sm:px-3 sm:py-2.5 sm:text-[11px] ${index === 0 ? stickyThCls : ''} ${index === 1 && stickySecond ? stickySecondTh : ''}`}>{header}</th>)}</tr></thead>
       {children}
@@ -905,9 +905,9 @@ export default function BrokerageCalculatorPage() {
   return <div className="flex h-[100dvh] overflow-hidden bg-[#F8FAFC] max-sm:bg-white font-outfit text-sm text-[#374151] [color-scheme:light]">
     <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onToggle={toggleSidebar} desktopOnly />
     <Sidebar isOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} mobileOnly />
-    <div className={`scrollbar-hide flex min-w-0 flex-1 flex-col overflow-y-auto max-sm:overflow-x-hidden ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'}`}>
-      <header className="mx-0 mb-4 mt-0 rounded-none bg-white px-3 py-5 shadow-sm sm:m-5 sm:rounded-xl sm:px-4 sm:py-4 max-sm:sticky max-sm:top-0 max-sm:z-30 max-sm:mb-1 max-sm:bg-white max-sm:px-4 max-sm:pt-4 max-sm:pb-2 max-sm:shadow-none">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+    <div className={`scrollbar-hide flex min-w-0 flex-1 flex-col overflow-hidden max-sm:overflow-x-hidden ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'}`}>
+      <header className="shrink-0 mx-0 mb-4 mt-0 rounded-none bg-white px-3 py-5 shadow-sm sm:m-5 sm:rounded-xl sm:px-4 sm:py-4 max-sm:mb-1 max-sm:bg-white max-sm:px-4 max-sm:pt-4 max-sm:pb-2 max-sm:shadow-none">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 sm:gap-3">
           <div className="min-w-0 w-auto shrink-0 max-w-full sm:max-w-64"><div className="flex items-center gap-2">
             <button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F1F5FB] text-[#4B4B4B] shadow-inner lg:hidden max-sm:h-12 max-sm:w-12 max-sm:rounded-2xl max-sm:bg-transparent max-sm:border max-sm:border-[#D5DEEA] max-sm:text-black max-sm:shadow-none" onClick={() => setMobileSidebarOpen(true)} aria-label="Open navigation">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect y="3.75" width="20" height="2.5" rx="1.25" fill="currentColor"/><rect y="8.75" width="20" height="2.5" rx="1.25" fill="currentColor"/><rect y="13.75" width="20" height="2.5" rx="1.25" fill="currentColor"/></svg>
@@ -919,8 +919,8 @@ export default function BrokerageCalculatorPage() {
             <span className="sm:hidden"><BrokerCreditSummary variant="header" /></span>
           </div></div>
 
-          {/* Desktop controls: nowrap so USD-INR never drops to a second line */}
-        <div aria-label="Calculator controls" className="hidden min-w-0 flex-1 basis-[620px] flex-wrap items-center gap-1 overflow-visible lg:flex min-[1700px]:gap-2">
+          {/* Desktop controls: wrap as one block, never icon-by-icon */}
+        <div aria-label="Calculator controls" className="hidden min-w-0 flex-none flex-wrap items-center gap-1 overflow-visible lg:flex min-[1700px]:gap-2">
           <select aria-label="Settlement week" title="Settlement week" className={`${toolSelectCls} w-[112px] px-1.5 min-[1700px]:w-[132px] min-[1700px]:px-2`} value={query.week_id ?? ''} disabled={savingUsd} onChange={event => { setQuery(current => ({ ...current, week_id: Number(event.target.value), page: 1 })); setPendingIssue('') }}>
             {!weeks.length && <option value="">No weeks available</option>}{weeks.map(week => <option key={week.id} value={week.id}>{week.name || `Week ${week.id}`}</option>)}
           </select>
@@ -929,35 +929,36 @@ export default function BrokerageCalculatorPage() {
           </select>
           <span className="mx-0.5 h-6 w-px shrink-0 bg-[#E5E7EB]" aria-hidden="true" />
           <button type="button" className={`${toolIconCls} !h-9 !gap-1 !px-1.5 text-[11px] min-[1700px]:!gap-1.5 min-[1700px]:!px-2.5 min-[1700px]:text-xs`} onClick={refresh} disabled={busy} title="Recalculate" aria-label="Recalculate">
-            <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            <svg aria-hidden="true" className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
             <span>Recalculate</span>
           </button>
           <button type="button" className={`${toolIconCls} !h-9 !gap-1 !px-1.5 text-[11px] min-[1700px]:!gap-1.5 min-[1700px]:!px-2.5 min-[1700px]:text-xs`} onClick={() => setSettings({ client: false })} title="Default Exchange Brokerage" aria-label="Default Exchange Brokerage">
-            <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18"/><path d="M5 21v-8M9.5 21v-8M14.5 21v-8M19 21v-8"/><path d="M12 3l9 6H3l9-6z"/></svg>
+            <svg aria-hidden="true" className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18"/><path d="M5 21v-8M9.5 21v-8M14.5 21v-8M19 21v-8"/><path d="M12 3l9 6H3l9-6z"/></svg>
             <span className="whitespace-nowrap">Default Exchange Brokerage</span>
           </button>
           <Link className={`${toolIconCls} !h-9 !gap-1 !px-1.5 text-[11px] min-[1700px]:!gap-1.5 min-[1700px]:!px-2.5 min-[1700px]:text-xs`} to="/client-percentage" title="Manage LD%" aria-label="Manage LD%">
+            <svg aria-hidden="true" className="h-4 w-4 min-[1700px]:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
             <span>Manage LD%</span>
           </Link>
           <button type="button" className={`flex h-9 shrink-0 items-center gap-1 rounded-lg border px-1.5 text-[10px] font-medium outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 min-[1700px]:gap-1.5 min-[1700px]:px-2.5 min-[1700px]:text-xs ${usd?.source === 'none' ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50'}`} disabled={busy || !report} onClick={openUsd} aria-label="Edit USD-INR rate" aria-haspopup="dialog" aria-expanded={editingUsd} title="Edit USD-INR rate">
             <span>USD-INR</span><span className="font-semibold tabular-nums">{usd?.rate == null ? 'Set' : format(usd.rate)}</span>
           </button>
         </div>
-          <div className="ml-auto hidden min-w-0 flex-wrap items-center justify-end gap-1 lg:flex min-[1700px]:gap-2">
+          <div className="hidden min-w-0 flex-none items-center justify-end gap-1 lg:ml-auto lg:flex min-[1700px]:gap-2">
             <span className="hidden min-[1700px]:block"><GroupSelector refreshOnOpen moduleName="brokerage-calculator" onRatesClick={group => setRatesGroup(group.name)} onCreateClick={() => { setEditingGroup(null); setShowGroupModal(true) }} onEditClick={group => { setEditingGroup(group); setShowGroupModal(true) }} /></span>
             <span className="min-[1700px]:hidden"><GroupSelector compact refreshOnOpen moduleName="brokerage-calculator" onRatesClick={group => setRatesGroup(group.name)} onCreateClick={() => { setEditingGroup(null); setShowGroupModal(true) }} onEditClick={group => { setEditingGroup(group); setShowGroupModal(true) }} /></span>
             <button type="button" className={`${toolTextCls} !h-9 !gap-1 !px-1.5 text-[11px] min-[1700px]:!gap-1.5 min-[1700px]:!px-3 min-[1700px]:text-xs border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50`} onClick={() => setImportOpen(true)} title="Import rates from Excel or CSV" aria-label="Import rates">
-              <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4" /></svg>
+              <svg aria-hidden="true" className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4" /></svg>
               <span>Import</span>
             </button>
             <button type="button" className={`${toolTextCls} !h-9 !gap-1 !px-1.5 text-[11px] min-[1700px]:!gap-1.5 min-[1700px]:!px-3 min-[1700px]:text-xs border-blue-600 bg-blue-600 text-white hover:bg-blue-700`} disabled={busy || !report || !!exporting || search !== query.search} onClick={openExportMenu} aria-haspopup="menu" aria-expanded={!!exportMenu} title="Export matching records as CSV" aria-label="Export matching records">
-              <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3m-4 4 4-4 4 4M5 17v4h14v-4" /></svg>
+              <svg aria-hidden="true" className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3m-4 4 4-4 4 4M5 17v4h14v-4" /></svg>
               <span>{exporting ? 'Exporting...' : 'Export'}</span>
             </button>
           </div>
         </div>
       </header>
-      <main className="min-w-0 px-3 pb-8 sm:px-5">
+      <main className="min-w-0 flex-1 overflow-y-auto px-3 pb-8 sm:px-5">
         {/* Mobile: controls sit in their own row below the header bar, like the Clients module */}
         {/* Mobile toolbar: one row that may slide sideways. The week/status menus are rendered outside the
             sliding row (anchored to this wrapper) so the scroll container can't clip them. */}

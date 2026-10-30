@@ -6,6 +6,9 @@ import { fetchAllRows, downloadCsv, EXPORT_CHUNK_SIZE } from '../utils/exportAll
 import useSearchAsYouType from '../hooks/useSearchAsYouType'
 import { createPortal } from 'react-dom'
 import ColumnChooserList from '../components/ColumnChooserList'
+import ColumnFilterMenu from '../components/ColumnFilterMenu'
+import ColumnFilterTrigger from '../components/ColumnFilterTrigger'
+import useColumnFilters from '../hooks/useColumnFilters'
 import Sidebar from '../components/Sidebar'
 import MobileBottomNav from '../components/MobileBottomNav'
 import MobileCalendar from '../components/MobileCalendar'
@@ -160,6 +163,18 @@ export default function CreditReportPage() {
   const [validation, setValidation] = useState('')
   const [refresh, setRefresh] = useState(0)
   const update = (key, value) => setDraft(previous => ({ ...previous, [key]: value }))
+  const {
+    filters: columnFilters,
+    requestFilters: columnRequestFilters,
+    openColumn: openFilterColumn,
+    openMenu: openColumnFilter,
+    closeMenu: closeColumnFilter,
+    setFilter: applyColumnFilterRaw,
+    clearFilter: clearColumnFilterRaw,
+  } = useColumnFilters()
+  const filterRefs = useRef({})
+  const applyColumnFilter = (key, filter) => { applyColumnFilterRaw(key, filter); setPage(1) }
+  const clearColumnFilter = key => { clearColumnFilterRaw(key); setPage(1) }
   const toggleSidebar = () => setSidebarOpen(previous => {
     try { localStorage.setItem('sidebarOpen', JSON.stringify(!previous)) } catch { /* Storage may be unavailable. */ }
     return !previous
@@ -174,7 +189,16 @@ export default function CreditReportPage() {
     const controller = new AbortController()
     setLoading(true)
     setError('')
-    const body = buildCreditRequest(applied, page, limit)
+    let body
+    try {
+      body = buildCreditRequest(applied, page, limit)
+      if (columnRequestFilters.length) body.filters = [...(body.filters || []), ...columnRequestFilters]
+    } catch (requestError) {
+      setError(requestError.message)
+      setResult({ rows: [], total: null, pages: null })
+      setLoading(false)
+      return () => controller.abort()
+    }
     if (!applyReportGroupFilter(body, JSON.parse(groupKey))) {
       setResult({ rows: [], total: 0, pages: 1 })
       setLoading(false)
@@ -192,7 +216,7 @@ export default function CreditReportPage() {
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [applied, page, limit, refresh, isAuthenticated, groupKey])
+  }, [applied, page, limit, refresh, isAuthenticated, groupKey, columnRequestFilters])
 
   useEffect(() => {
     if (!panel) return
@@ -281,6 +305,20 @@ export default function CreditReportPage() {
     ...shownColumns.filter(([key]) => !isMobilePinned(key))
   ]
   const mobileFrozenWidths = Object.fromEntries(mobileColumns.filter(([key]) => isMobilePinned(key)).map(([key]) => [key, MOBILE_PIN_WIDTHS[key] || 120]))
+  const sortColumnBy = (key, direction) => {
+    setApplied(previous => ({ ...previous, sortBy: key, sortOrder: direction }))
+    setPage(1)
+  }
+  const filterIconFor = (key, label, mobile = false) => (
+    <ColumnFilterTrigger
+      columnKey={key}
+      label={label}
+      filterRef={node => { filterRefs.current[key] = node }}
+      active={Boolean(columnFilters[`${key}_custom`])}
+      onClick={openColumnFilter}
+      className={mobile ? 'ml-1 !h-4 !w-4' : 'ml-1'}
+    />
+  )
   const iconButton = 'h-10 w-9 md:h-8 md:w-8 shrink-0 rounded-xl md:rounded-md border border-[#E5E7EB] bg-white text-[#4B5563] shadow-sm flex items-center justify-center hover:bg-gray-50 disabled:opacity-40'
   const openPanel = value => { setValidation(''); setPanel(value) }
   const toolButtons = <>
@@ -308,7 +346,10 @@ export default function CreditReportPage() {
   </div>
   const table = (tableColumns, mobile = false) => <table className="w-full min-w-full border-separate border-spacing-0 text-xs">
     <thead className="sticky top-0 z-20 bg-blue-600 shadow-md max-md:-top-px max-md:bg-blue-500 max-md:shadow-[0_2px_6px_rgba(37,99,235,0.25)]"><tr>{tableColumns.map(([key, label]) => <th key={key} style={mobile ? mobileFrozenStyle(tableColumns, key, true, mobileFrozenWidths) : pinnedStyle(key, true)} aria-sort={key === applied.sortBy ? applied.sortOrder === 'asc' ? 'ascending' : 'descending' : undefined} className={`whitespace-nowrap border-r border-blue-400 bg-blue-600 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-white ${mobile ? 'h-8 !border-r-0 !bg-blue-500 px-2 py-1 text-[10px]' : ''}`}>
-      <button type="button" className="inline-flex w-full items-center gap-1 uppercase focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" aria-label={`Sort by ${label}, ${applied.sortBy === key && applied.sortOrder === 'desc' ? 'ascending' : 'descending'}`} onClick={() => { setApplied(previous => ({ ...previous, sortBy: key, sortOrder: previous.sortBy === key && previous.sortOrder === 'desc' ? 'asc' : 'desc' })); setPage(1) }}>{label}{applied.sortBy === key && <Icon name={applied.sortOrder === 'asc' ? 'up' : 'down'} />}</button>
+      <span className="inline-flex items-center">
+        <button type="button" className="inline-flex items-center gap-1 uppercase focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" aria-label={`Sort by ${label}, ${applied.sortBy === key && applied.sortOrder === 'desc' ? 'ascending' : 'descending'}`} onClick={() => { setApplied(previous => ({ ...previous, sortBy: key, sortOrder: previous.sortBy === key && previous.sortOrder === 'desc' ? 'asc' : 'desc' })); setPage(1) }}>{label}{applied.sortBy === key && <Icon name={applied.sortOrder === 'asc' ? 'up' : 'down'} />}</button>
+        {filterIconFor(key, label, mobile)}
+      </span>
     </th>)}</tr></thead>
     <tbody aria-busy={loading}>{loading ? Array.from({ length: 15 }, (_, index) => <tr key={index}>{tableColumns.map(([key]) => <td key={key} className="border-b border-r border-[#E5E7EB] px-3 py-3"><div className="h-3 min-w-16 animate-pulse rounded bg-gray-200" /></td>)}</tr>) : error || !result.rows.length ? <tr><td colSpan={tableColumns.length} className="p-10 text-center"><div role={error ? 'alert' : 'status'} className={error ? 'text-red-600' : 'text-slate-500'}>{error || 'No credit records found'}<p className="mt-1 text-xs">{error ? <button type="button" onClick={() => setRefresh(value => value + 1)} className="text-blue-600 underline">Retry</button> : 'Try a wider date range or adjust your filters.'}</p></div></td></tr> : result.rows.map((row, index) => <tr key={index} className="group">{tableColumns.map(([key]) => <td key={key} style={mobile ? mobileFrozenStyle(tableColumns, key, false, mobileFrozenWidths) : pinnedStyle(key)} title={display(row, key)} className={`whitespace-nowrap border-b border-r border-[#E5E7EB] px-3 py-2.5 text-sm group-hover:bg-blue-50 ${index % 2 ? 'bg-[#F9FAFB]' : 'bg-white'} ${mobile ? 'h-[38px] !border-r-0 border-[#E1E1E1] px-2 py-1 text-[10px]' : ''} ${key === 'login' ? 'text-blue-600' : key === 'amount' ? Number(field(row, key)) < 0 ? 'text-red-500' : 'text-green-600' : 'text-gray-900'} ${key === 'comment' ? 'max-w-[220px] truncate' : ''}`}>{key === 'login' && field(row, 'login') != null && String(field(row, 'login')).trim() !== '' && field(row, 'login') !== '-' ? <button type="button" onClick={() => setSelectedClient({ login: field(row, 'login'), name: field(row, 'name') || '' })} className="rounded-sm text-blue-600 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600" aria-label={`Open client details for ${field(row, 'login')}`}>{display(row, key)}</button> : display(row, key)}</td>)}</tr>)}</tbody>
   </table>
@@ -365,6 +406,23 @@ export default function CreditReportPage() {
           <MobileBottomNav onMore={() => setSidebarOpen(true)} />
         </div>
       </main>
+      {openFilterColumn && (() => {
+        const column = columns.find(([key]) => key === openFilterColumn)
+        if (!column) return null
+        return (
+          <ColumnFilterMenu
+            label={column[1]}
+            kind={column[0] === 'time' ? 'date' : column[0] === 'amount' ? 'number' : 'text'}
+            value={columnFilters[`${column[0]}_custom`] || null}
+            sortDirection={applied.sortBy === column[0] ? applied.sortOrder : null}
+            onSort={direction => sortColumnBy(column[0], direction)}
+            onClear={() => clearColumnFilter(column[0])}
+            onApply={filter => applyColumnFilter(column[0], filter)}
+            onClose={closeColumnFilter}
+            anchorRef={{ current: filterRefs.current[column[0]] }}
+          />
+        )
+      })()}
       {columnPickerPosition && createPortal(
         <div ref={columnPickerRef} role="dialog" aria-label="Show, hide and reorder columns" className="fixed z-[60] flex w-[280px] flex-col rounded-lg border border-[#E5E7EB] bg-white shadow-lg" style={columnPickerPosition}>
           <div className="flex items-center justify-between border-b border-[#F3F4F6] px-3 py-2">

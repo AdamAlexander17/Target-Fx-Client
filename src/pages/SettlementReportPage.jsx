@@ -10,6 +10,9 @@ import LoginGroupsModal from '../components/LoginGroupsModal'
 import LoginGroupModal from '../components/LoginGroupModal'
 import PageSizeSelect from '../components/PageSizeSelect'
 import ColumnChooserList from '../components/ColumnChooserList'
+import ColumnFilterMenu from '../components/ColumnFilterMenu'
+import ColumnFilterTrigger from '../components/ColumnFilterTrigger'
+import useColumnFilters from '../hooks/useColumnFilters'
 import { Cell } from '../components/settlement/SettlementCell'
 import SettlementDetailModal from '../components/settlement/SettlementDetailModal'
 import useSearchAsYouType from '../hooks/useSearchAsYouType'
@@ -96,6 +99,19 @@ export default function SettlementReportPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(100)
+  const [sortBy, setSortBy] = useState('')
+  const [sortOrder, setSortOrder] = useState('asc')
+  const {
+    filters: columnFilters,
+    openColumn: openFilterColumn,
+    openMenu: openColumnFilter,
+    closeMenu: closeColumnFilter,
+    setFilter: applyColumnFilter,
+    clearFilter: clearColumnFilter,
+    filterRows,
+    sortRows,
+  } = useColumnFilters()
+  const filterRefs = useRef({})
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(null)
   const [pages, setPages] = useState(null)
@@ -259,6 +275,21 @@ export default function SettlementReportPage() {
   }
   // Keep the week's own id (number or string, whatever the API uses) so lookups by id still match.
   const changeWeek = value => { setWeekId(weeks.find(week => String(week.id) === String(value))?.id ?? value); setPage(1) }
+  const sortColumnBy = (key, direction) => {
+    setSortBy(key)
+    setSortOrder(direction)
+  }
+  const filterIconFor = (column, mobile = false) => (
+    <ColumnFilterTrigger
+      columnKey={column.key}
+      label={column.label}
+      filterRef={node => { filterRefs.current[column.key] = node }}
+      active={Boolean(columnFilters[`${column.key}_custom`])}
+      onClick={openColumnFilter}
+      className={mobile ? 'ml-1 !h-4 !w-4' : 'ml-1'}
+    />
+  )
+  const displayRows = sortRows(filterRows(rows, (row, key) => row?.[key]), (row, key) => row?.[key], sortBy, sortOrder)
 
   // ---------- header controls (right side of the header card, like Deals) ----------
   const headerControls = (
@@ -305,7 +336,7 @@ export default function SettlementReportPage() {
   } else if (empty) {
     bodyRows = <tr><td colSpan={Math.max(shownColumns.length, 1)}>{emptyBlock}</td></tr>
   } else {
-    bodyRows = rows.map((row, index) => {
+    bodyRows = displayRows.map((row, index) => {
       const zebra = index % 2 ? 'bg-[#F9FAFB]' : 'bg-white'
       return (
         <tr key={index} className={`group ${zebra}`}>
@@ -328,7 +359,7 @@ export default function SettlementReportPage() {
         ))}
       </tr>
     ))
-    : empty ? null : rows.map((row, index) => (
+    : empty ? null : displayRows.map((row, index) => (
       <tr key={index} className="bg-transparent">
         {phoneColumns.map(column => (
           <td key={column.key} className={`h-[38px] whitespace-nowrap border-b border-[#E1E1E1] px-1 text-[10px] text-[#4B4B4B] ${isPhonePinned(column) ? 'truncate bg-white px-2' : ''} ${column.kind === 'login' ? 'font-semibold text-[#1A63BC]' : ''}`} style={phonePinStyle(column)}>
@@ -454,7 +485,12 @@ export default function SettlementReportPage() {
                 <thead>
                   <tr>
                     {phoneColumns.map(column => (
-                      <th key={column.key} scope="col" className={`sticky -top-px h-[32px] whitespace-nowrap bg-blue-500 px-1 text-left text-[10px] font-semibold text-white ${isPhonePinned(column) ? 'z-30 truncate px-2' : 'z-20'}`} style={{ ...phonePinStyle(column, true), top: -1 }}>{column.label}</th>
+                      <th key={column.key} scope="col" className={`sticky -top-px h-[32px] whitespace-nowrap bg-blue-500 px-1 text-left text-[10px] font-semibold text-white ${isPhonePinned(column) ? 'z-30 truncate px-2' : 'z-20'}`} style={{ ...phonePinStyle(column, true), top: -1 }}>
+                        <span className="inline-flex items-center">
+                          <span className="truncate">{column.label}</span>
+                          {filterIconFor(column, true)}
+                        </span>
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -586,7 +622,12 @@ export default function SettlementReportPage() {
                 <thead>
                   <tr>
                     {shownColumns.map(column => (
-                      <th key={column.key} scope="col" className={`sticky top-0 whitespace-nowrap border-r border-blue-400 bg-blue-600 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-white last:border-r-0 ${column.kind === 'login' ? 'left-0 z-20' : 'z-10'}`}>{column.label}</th>
+                      <th key={column.key} scope="col" className={`sticky top-0 whitespace-nowrap border-r border-blue-400 bg-blue-600 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-white last:border-r-0 ${column.kind === 'login' ? 'left-0 z-20' : 'z-10'}`}>
+                        <span className="inline-flex items-center">
+                          <span>{column.label}</span>
+                          {filterIconFor(column)}
+                        </span>
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -601,6 +642,24 @@ export default function SettlementReportPage() {
           <MobileBottomNav onMore={() => setMobileNavOpen(true)} />
         </div>
       </main>
+
+      {openFilterColumn && (() => {
+        const column = columns.find(item => item.key === openFilterColumn)
+        if (!column) return null
+        return (
+          <ColumnFilterMenu
+            label={column.label}
+            kind={['money', 'number', 'date', 'login'].includes(column.kind) ? 'number' : 'text'}
+            value={columnFilters[`${column.key}_custom`] || null}
+            sortDirection={sortBy === column.key ? sortOrder : null}
+            onSort={direction => sortColumnBy(column.key, direction)}
+            onClear={() => clearColumnFilter(column.key)}
+            onApply={filter => applyColumnFilter(column.key, filter)}
+            onClose={closeColumnFilter}
+            anchorRef={{ current: filterRefs.current[column.key] }}
+          />
+        )
+      })()}
 
       <GroupModal isOpen={showGroupModal} onClose={() => setShowGroupModal(false)} editGroup={editingGroup} />
 
