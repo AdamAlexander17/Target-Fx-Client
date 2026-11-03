@@ -748,7 +748,8 @@ export default function PositionModule() {
       case 'totalProfit':
       case 'profit': {
         const rawProfit = pos.profit || 0
-        const isCentSym = /[cC]$/.test(String(pos.symbol || ''))
+        // Cent accounts use forex-style suffix (EURUSDc): 6-letter pair + lowercase c. GOLDDEC etc. are not cent.
+        const isCentSym = /^[A-Z]{6}c$/.test(String(pos.symbol || ''))
         const displayProfit = isCentSym ? rawProfit / 100 : rawProfit
         return (
           <div title={numericMode === 'compact' ? fmtMoneyFull(displayProfit) : undefined} className={`h-[38px] flex items-center justify-start px-2 font-medium ${
@@ -770,7 +771,7 @@ export default function PositionModule() {
       case 'profitPercentage':
         return <div className={`h-[38px] flex items-center justify-start px-2 ${stickyClass}`} style={stickyStyle}>{formatNum(pos.profitPercentage || 0)}%</div>
       case 'storage': {
-        const isCentSym = /[cC]$/.test(String(pos.symbol || ''))
+        const isCentSym = /^[A-Z]{6}c$/.test(String(pos.symbol || ''))
         const displayStorage = isCentSym ? (pos.storage || 0) / 100 : (pos.storage || 0)
         return <div title={numericMode === 'compact' ? fmtMoneyFull(displayStorage) : undefined} className={`h-[38px] flex items-center justify-start px-2 ${stickyClass}`} style={stickyStyle}>{fmtMoney(displayStorage)}</div>
       }
@@ -783,7 +784,7 @@ export default function PositionModule() {
       case 'tp':
         return <div className={`h-[38px] flex items-center justify-start px-2 ${stickyClass}`} style={stickyStyle}>{formatNum(pos.tp || 0, 5)}</div>
       case 'commission': {
-        const isCentSym = /[cC]$/.test(String(pos.symbol || ''))
+        const isCentSym = /^[A-Z]{6}c$/.test(String(pos.symbol || ''))
         const displayCommission = isCentSym ? (pos.commission || 0) / 100 : (pos.commission || 0)
         return <div title={numericMode === 'compact' ? fmtMoneyFull(displayCommission) : undefined} className={`h-[38px] flex items-center justify-start px-2 ${stickyClass}`} style={stickyStyle}>{fmtMoney(displayCommission)}</div>
       }
@@ -1025,7 +1026,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
           if (key === 'tp') return row.tp ?? row.priceTP ?? 0
           if (['profit', 'totalProfit', 'storage', 'commission'].includes(key)) {
             const value = row[key === 'totalProfit' ? 'profit' : key] ?? 0
-            return /[cC]$/.test(String(row.symbol || '')) ? value / 100 : value
+            return /^[A-Z]{6}c$/.test(String(row.symbol || '')) ? value / 100 : value
           }
           return row[key]
         }

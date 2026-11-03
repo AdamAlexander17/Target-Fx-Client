@@ -162,6 +162,7 @@ export default function DepositWithdrawalReportPage() {
     filters: columnFilters,
     requestFilters: columnRequestFilters,
     openColumn: openFilterColumn,
+    openRect: openFilterRect,
     openMenu: openColumnFilter,
     closeMenu: closeColumnFilter,
     setFilter: applyColumnFilterRaw,
@@ -428,7 +429,8 @@ export default function DepositWithdrawalReportPage() {
             onClear={() => clearColumnFilter(column[0])}
             onApply={filter => applyColumnFilter(column[0], filter)}
             onClose={closeColumnFilter}
-            anchorRef={{ current: filterRefs.current[column[0]] }}
+            anchorRef={() => filterRefs.current[column[0]]}
+            initialRect={openFilterRect}
           />
         )
       })()}

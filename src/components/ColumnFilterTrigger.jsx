@@ -1,11 +1,19 @@
 // Compact filter button for a report table header. The caller renders ColumnFilterMenu
 // and passes the same ref so the menu anchors to this button.
+import { useRef, useCallback, useEffect } from 'react'
+
 export default function ColumnFilterTrigger({ columnKey, label, filterRef, active = false, onClick, className = '' }) {
+  // Keep the latest filterRef without making the DOM ref callback change identity.
+  const filterRefLive = useRef(filterRef)
+  useEffect(() => { filterRefLive.current = filterRef })
+  const setRefs = useCallback(node => {
+    if (node) filterRefLive.current?.(node)
+  }, [])
   return (
     <button
-      ref={filterRef}
+      ref={setRefs}
       type="button"
-      onClick={event => { event.stopPropagation(); onClick(columnKey) }}
+      onClick={event => { event.stopPropagation(); onClick(columnKey, event.currentTarget.getBoundingClientRect()) }}
       aria-haspopup="dialog"
       aria-label={`Filter ${label}`}
       title={`Filter ${label}`}

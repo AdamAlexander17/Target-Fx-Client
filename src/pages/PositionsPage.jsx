@@ -1205,11 +1205,13 @@ const PositionsPage = () => {
   // Helper function to adjust value for USC symbols (divide by 100)
   const adjustValueForSymbol = (value, symbol, isCentField = false) => {
     if (!symbol || value === null || value === undefined) return value
-    const symbolStr = String(symbol).toUpperCase()
-    if (symbolStr.includes('USC')) {
+    const raw = String(symbol)
+    // Cent accounts are forex-style: 6-letter pair + single suffix (EURUSDc / EURUSDSC-style).
+    // Month-coded futures (GOLDDEC, GOLDUSC, GOLDNOV...) must never be divided.
+    if (/^[A-Z]{6}USC$/i.test(raw)) {
       return Number(value) / 100
     }
-    if (isCentField && /[cC]$/.test(String(symbol))) {
+    if (isCentField && /^[A-Z]{6}c$/.test(raw)) {
       return Number(value) / 100
     }
     return value

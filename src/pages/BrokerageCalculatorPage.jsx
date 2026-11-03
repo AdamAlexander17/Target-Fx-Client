@@ -39,9 +39,9 @@ const errorMessage = error => error?.response?.data?.message || error.message ||
 const buttonBaseCls = 'rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50'
 const buttonCls = `${buttonBaseCls} border-[#E5E7EB] bg-white text-[#374151] hover:bg-blue-50`
 const primaryCls = `${buttonBaseCls} border-blue-600 bg-blue-600 text-white hover:bg-blue-700`
-const toolSelectCls = 'h-9 shrink-0 truncate rounded-lg border border-[#E5E7EB] bg-white px-2 font-outfit text-xs font-medium text-[#374151] outline-none hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 disabled:opacity-50'
-const toolIconCls = 'flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 font-outfit text-xs font-medium border-[#E5E7EB] bg-white text-[#374151] outline-none hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:opacity-50'
-const toolTextCls = 'flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 font-outfit text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50'
+const toolSelectCls = 'h-8 shrink-0 truncate rounded-lg border border-[#E5E7EB] bg-white pl-1.5 pr-5 font-outfit text-[11px] font-medium text-[#374151] outline-none hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 disabled:opacity-50 bg-[right_0.3rem_center]'
+const toolIconCls = 'flex h-8 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg border px-2 font-outfit text-[11px] font-medium border-[#E5E7EB] bg-white text-[#374151] outline-none hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:opacity-50'
+const toolTextCls = 'flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border px-1.5 font-outfit text-[11px] font-semibold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50'
 const mobileIconCls = 'flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-2.5 text-[12px] font-semibold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50'
 const mobileIconButtonCls = `${mobileIconCls} border-[#D5DEEA] bg-transparent text-[#1F2937] hover:bg-white/60`
 const mobileIconPrimaryCls = `${mobileIconCls} border-[#2563EB] bg-[#2563EB] text-white shadow-[0_4px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700`
@@ -198,7 +198,7 @@ function RateSettings({ client = false, selection = {}, onClose, onSaved }) {
   }
 
   return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 p-2 sm:p-3 max-sm:items-end max-sm:bg-black/40 max-sm:p-0">
-    <section role="dialog" aria-modal="true" aria-labelledby="rate-settings-title" className="flex max-h-[85dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white font-outfit text-sm text-[#374151] shadow-xl [color-scheme:light] sm:max-h-[78dvh] max-sm:max-h-[90dvh] max-sm:rounded-b-none max-sm:rounded-t-[28px] max-sm:bg-white max-sm:shadow-[0_-8px_30px_rgba(15,23,42,0.12)]">
+    <section role="dialog" aria-modal="true" aria-labelledby="rate-settings-title" className="flex max-h-[85dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white font-outfit text-sm text-[#374151] shadow-xl [color-scheme:light] sm:max-h-[78dvh] max-sm:max-h-[90dvh] max-sm:rounded-b-none max-sm:rounded-t-[28px] max-sm:bg-white max-sm:shadow-[0_-8px_30px_rgba(15,23,42,0.12)]">
       <div className="flex shrink-0 justify-center pt-2.5 sm:hidden"><span className="h-1 w-10 rounded-full bg-[#CBD5E1]" /></div>
       <header className="flex shrink-0 items-start justify-between gap-3 border-b border-[#E5E7EB] p-3 sm:gap-4 sm:px-5 sm:py-3.5 max-sm:items-center max-sm:border-[#D5DEEA] max-sm:px-5 max-sm:pb-3 max-sm:pt-3">
         <div><h2 id="rate-settings-title" className="text-base font-semibold text-[#1A1A1A] sm:text-lg max-sm:text-[18px] max-sm:font-extrabold max-sm:tracking-tight max-sm:text-[#0F172A]">{client ? `Set Brokerage${selection.login ? ` · ${selection.login}` : ''}` : 'Default Exchange Brokerage'}</h2>
@@ -906,8 +906,8 @@ export default function BrokerageCalculatorPage() {
     <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onToggle={toggleSidebar} desktopOnly />
     <Sidebar isOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} mobileOnly />
     <div className={`scrollbar-hide flex min-w-0 flex-1 flex-col overflow-hidden max-sm:overflow-x-hidden ${sidebarOpen ? 'lg:ml-60' : 'lg:ml-16'}`}>
-      <header className="shrink-0 mx-0 mb-4 mt-0 rounded-none bg-white px-3 py-5 shadow-sm sm:m-5 sm:rounded-xl sm:px-4 sm:py-4 max-sm:mb-1 max-sm:bg-white max-sm:px-4 max-sm:pt-4 max-sm:pb-2 max-sm:shadow-none">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 sm:gap-3">
+      <header className="shrink-0 mx-0 mb-4 mt-0 rounded-none bg-white px-3 py-4 shadow-sm sm:m-5 sm:rounded-2xl sm:px-6 sm:py-3 max-sm:mb-1 max-sm:bg-white max-sm:px-4 max-sm:pt-4 max-sm:pb-2 max-sm:shadow-none">
+        <div className="flex flex-nowrap items-center gap-x-2 sm:gap-3">
           <div className="min-w-0 w-auto shrink-0 max-w-full sm:max-w-64"><div className="flex items-center gap-2">
             <button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F1F5FB] text-[#4B4B4B] shadow-inner lg:hidden max-sm:h-12 max-sm:w-12 max-sm:rounded-2xl max-sm:bg-transparent max-sm:border max-sm:border-[#D5DEEA] max-sm:text-black max-sm:shadow-none" onClick={() => setMobileSidebarOpen(true)} aria-label="Open navigation">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect y="3.75" width="20" height="2.5" rx="1.25" fill="currentColor"/><rect y="8.75" width="20" height="2.5" rx="1.25" fill="currentColor"/><rect y="13.75" width="20" height="2.5" rx="1.25" fill="currentColor"/></svg>
@@ -920,39 +920,49 @@ export default function BrokerageCalculatorPage() {
           </div></div>
 
           {/* Desktop controls: wrap as one block, never icon-by-icon */}
-        <div aria-label="Calculator controls" className="hidden min-w-0 flex-none flex-wrap items-center gap-1 overflow-visible lg:flex min-[1700px]:gap-2">
-          <select aria-label="Settlement week" title="Settlement week" className={`${toolSelectCls} w-[112px] px-1.5 min-[1700px]:w-[132px] min-[1700px]:px-2`} value={query.week_id ?? ''} disabled={savingUsd} onChange={event => { setQuery(current => ({ ...current, week_id: Number(event.target.value), page: 1 })); setPendingIssue('') }}>
-            {!weeks.length && <option value="">No weeks available</option>}{weeks.map(week => <option key={week.id} value={week.id}>{week.name || `Week ${week.id}`}</option>)}
+        <div aria-label="Calculator controls" className="hidden min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-visible lg:flex min-[1700px]:gap-2">
+          <select aria-label="Settlement week" title="Settlement week" className={`${toolSelectCls} w-[92px] min-[1700px]:w-[120px]`} value={query.week_id ?? ''} disabled={savingUsd} onChange={event => { setQuery(current => ({ ...current, week_id: Number(event.target.value), page: 1 })); setPendingIssue('') }}>
+            {!weeks.length && <option value="">No weeks</option>}{weeks.map(week => <option key={week.id} value={week.id}>{(week.name || `Week ${week.id}`).replace(/^week\s*/i, 'Week ').replace(/\b([A-Za-z]{3})[A-Za-z]{2,}\b/g, '$1')}</option>)}
           </select>
-          <select aria-label="Status" title="Status" className={`${toolSelectCls} w-[68px] px-1.5 min-[1700px]:w-[88px] min-[1700px]:px-2`} value={query.status} onChange={event => setQuery(current => ({ ...current, status: event.target.value, page: 1 }))}>
+          <select aria-label="Status" title="Status" className={`${toolSelectCls} w-[62px] min-[1700px]:w-[76px]`} value={query.status} onChange={event => setQuery(current => ({ ...current, status: event.target.value, page: 1 }))}>
             <option value="all">All</option><option value="ready">Ready</option><option value="pending">Pending</option>
           </select>
-          <span className="mx-0.5 h-6 w-px shrink-0 bg-[#E5E7EB]" aria-hidden="true" />
-          <button type="button" className={`${toolIconCls} !h-9 !gap-1 !px-1.5 text-[11px] min-[1700px]:!gap-1.5 min-[1700px]:!px-2.5 min-[1700px]:text-xs`} onClick={refresh} disabled={busy} title="Recalculate" aria-label="Recalculate">
-            <svg aria-hidden="true" className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          <span className="mx-0.5 h-5 w-px shrink-0 bg-[#E5E7EB]" aria-hidden="true" />
+          <button type="button" className={toolIconCls} onClick={refresh} disabled={busy} title="Recalculate" aria-label="Recalculate">
+            <svg aria-hidden="true" className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
             <span>Recalculate</span>
           </button>
-          <button type="button" className={`${toolIconCls} !h-9 !gap-1 !px-1.5 text-[11px] min-[1700px]:!gap-1.5 min-[1700px]:!px-2.5 min-[1700px]:text-xs`} onClick={() => setSettings({ client: false })} title="Default Exchange Brokerage" aria-label="Default Exchange Brokerage">
-            <svg aria-hidden="true" className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18"/><path d="M5 21v-8M9.5 21v-8M14.5 21v-8M19 21v-8"/><path d="M12 3l9 6H3l9-6z"/></svg>
-            <span className="whitespace-nowrap">Default Exchange Brokerage</span>
+          <button type="button" className={toolIconCls} onClick={() => setSettings({ client: false })} title="Default Exchange Brokerage" aria-label="Default Exchange Brokerage">
+            <svg aria-hidden="true" className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18"/><path d="M5 21v-8M9.5 21v-8M14.5 21v-8M19 21v-8"/><path d="M12 3l9 6H3l9-6z"/></svg>
+            <span className="whitespace-nowrap">Default Brokerage</span>
           </button>
-          <Link className={`${toolIconCls} !h-9 !gap-1 !px-1.5 text-[11px] min-[1700px]:!gap-1.5 min-[1700px]:!px-2.5 min-[1700px]:text-xs`} to="/client-percentage" title="Manage LD%" aria-label="Manage LD%">
-            <svg aria-hidden="true" className="h-4 w-4 min-[1700px]:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+          <Link className={toolIconCls} to="/client-percentage" title="Manage LD%" aria-label="Manage LD%">
             <span>Manage LD%</span>
           </Link>
-          <button type="button" className={`flex h-9 shrink-0 items-center gap-1 rounded-lg border px-1.5 text-[10px] font-medium outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 min-[1700px]:gap-1.5 min-[1700px]:px-2.5 min-[1700px]:text-xs ${usd?.source === 'none' ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50'}`} disabled={busy || !report} onClick={openUsd} aria-label="Edit USD-INR rate" aria-haspopup="dialog" aria-expanded={editingUsd} title="Edit USD-INR rate">
+          <button type="button" className={`${toolIconCls} ${usd?.source === 'none' ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:text-amber-900' : ''}`} disabled={busy || !report} onClick={openUsd} aria-label="Edit USD-INR rate" aria-haspopup="dialog" aria-expanded={editingUsd} title="Edit USD-INR rate">
             <span>USD-INR</span><span className="font-semibold tabular-nums">{usd?.rate == null ? 'Set' : format(usd.rate)}</span>
           </button>
         </div>
-          <div className="hidden min-w-0 flex-none items-center justify-end gap-1 lg:ml-auto lg:flex min-[1700px]:gap-2">
-            <span className="hidden min-[1700px]:block"><GroupSelector refreshOnOpen moduleName="brokerage-calculator" onRatesClick={group => setRatesGroup(group.name)} onCreateClick={() => { setEditingGroup(null); setShowGroupModal(true) }} onEditClick={group => { setEditingGroup(group); setShowGroupModal(true) }} /></span>
-            <span className="min-[1700px]:hidden"><GroupSelector compact refreshOnOpen moduleName="brokerage-calculator" onRatesClick={group => setRatesGroup(group.name)} onCreateClick={() => { setEditingGroup(null); setShowGroupModal(true) }} onEditClick={group => { setEditingGroup(group); setShowGroupModal(true) }} /></span>
-            <button type="button" className={`${toolTextCls} !h-9 !gap-1 !px-1.5 text-[11px] min-[1700px]:!gap-1.5 min-[1700px]:!px-3 min-[1700px]:text-xs border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50`} onClick={() => setImportOpen(true)} title="Import rates from Excel or CSV" aria-label="Import rates">
-              <svg aria-hidden="true" className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4" /></svg>
+          <div className="hidden min-w-0 flex-none flex-nowrap items-center justify-end gap-1 lg:ml-auto lg:flex min-[1700px]:gap-2">
+            <span className="hidden min-[1700px]:block"><GroupSelector refreshOnOpen moduleName="brokerage-calculator" onCreateClick={() => { setEditingGroup(null); setShowGroupModal(true) }} onEditClick={group => { setEditingGroup(group); setShowGroupModal(true) }} /></span>
+            <span className="min-[1700px]:hidden"><GroupSelector compact refreshOnOpen moduleName="brokerage-calculator" onCreateClick={() => { setEditingGroup(null); setShowGroupModal(true) }} onEditClick={group => { setEditingGroup(group); setShowGroupModal(true) }} /></span>
+            <button
+              type="button"
+              className={`${toolTextCls} border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50`}
+              onClick={() => { if (groupName) setRatesGroup(groupName); else setToast('Select a group first to manage its rates') }}
+              title={groupName ? `Brokerage rates for ${groupName}` : 'Select a group first to manage its rates'}
+              aria-label="Group rates"
+            >
+              <svg aria-hidden="true" className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 16h4"/></svg>
+              <span className="min-[1700px]:hidden">Rates</span>
+              <span className="hidden min-[1700px]:inline">Group Rates</span>
+            </button>
+            <button type="button" className={`${toolTextCls} border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50`} onClick={() => setImportOpen(true)} title="Import rates from Excel or CSV" aria-label="Import rates">
+              <svg aria-hidden="true" className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4" /></svg>
               <span>Import</span>
             </button>
-            <button type="button" className={`${toolTextCls} !h-9 !gap-1 !px-1.5 text-[11px] min-[1700px]:!gap-1.5 min-[1700px]:!px-3 min-[1700px]:text-xs border-blue-600 bg-blue-600 text-white hover:bg-blue-700`} disabled={busy || !report || !!exporting || search !== query.search} onClick={openExportMenu} aria-haspopup="menu" aria-expanded={!!exportMenu} title="Export matching records as CSV" aria-label="Export matching records">
-              <svg aria-hidden="true" className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3m-4 4 4-4 4 4M5 17v4h14v-4" /></svg>
+            <button type="button" className={`${toolTextCls} border-blue-600 bg-blue-600 text-white hover:bg-blue-700`} disabled={busy || !report || !!exporting || search !== query.search} onClick={openExportMenu} aria-haspopup="menu" aria-expanded={!!exportMenu} title="Export matching records as CSV" aria-label="Export matching records">
+              <svg aria-hidden="true" className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3m-4 4 4-4 4 4M5 17v4h14v-4" /></svg>
               <span>{exporting ? 'Exporting...' : 'Export'}</span>
             </button>
           </div>
@@ -992,6 +1002,10 @@ export default function BrokerageCalculatorPage() {
               <svg aria-hidden="true" className="h-4 w-4 shrink-0" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M2 3h14M4 7.5h10M6.5 12h5" /></svg>
               <span>Groups</span>
               {groupName && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[#2563EB] ring-2 ring-white" />}
+            </button>
+            <button type="button" className={mobileIconButtonCls} onClick={() => { if (groupName) setRatesGroup(groupName); else setToast('Select a group first to manage its rates') }} title={groupName ? `Brokerage rates for ${groupName}` : 'Select a group first to manage its rates'} aria-label="Group rates">
+              <svg aria-hidden="true" className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 16h4"/></svg>
+              <span>Group Rates</span>
             </button>
             <button type="button" className={mobileIconButtonCls} onClick={refresh} disabled={busy} title="Recalculate" aria-label="Recalculate">
               <svg aria-hidden="true" className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
@@ -1049,7 +1063,7 @@ export default function BrokerageCalculatorPage() {
         </div>
         {weeksError && <div role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-red-700">{weeksError} <button type="button" className={buttonCls} onClick={() => setWeeksReload(value => value + 1)}>Retry weeks</button></div>}
         {error && <div role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-red-700">{error} <button type="button" className={buttonCls} onClick={refresh}>Retry report</button></div>}
-        {report?.skipped_logins?.length > 0 && <p role="alert" className="mb-3 bg-amber-50 p-3 text-amber-800">Logins outside your client scope were skipped: {report.skipped_logins.join(', ')}.</p>}
+        {report?.skipped_logins?.length > 0 && <p role="alert" className="mb-3 bg-amber-50 p-3 text-amber-800">Logins outside your client scope were skipped: {report.skipped_logins.map(item => (item && typeof item === 'object' ? (item.login ?? item.id ?? JSON.stringify(item)) : item)).join(', ')}.</p>}
         {summary && <div className="scrollbar-hide mb-4 flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 lg:grid lg:snap-none lg:grid-cols-6 lg:overflow-visible lg:pb-0">
           {[
             ['Charged 100% · INR', formatKpiMoney(summary.charged_inr)],
@@ -1150,7 +1164,6 @@ export default function BrokerageCalculatorPage() {
         setActiveGroupFilter('brokerage-calculator', group?.name || null)
         setIsLoginGroupsOpen(false)
       }}
-      onRatesClick={group => { setIsLoginGroupsOpen(false); setRatesGroup(group.name) }}
       onCreateGroup={() => { setIsLoginGroupsOpen(false); setEditingGroup(null); setIsLoginGroupModalOpen(true) }}
       onEditGroup={group => { setIsLoginGroupsOpen(false); setEditingGroup(group); setIsLoginGroupModalOpen(true) }}
       onDeleteGroup={group => deleteGroup(group.name)}

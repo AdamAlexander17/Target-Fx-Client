@@ -904,7 +904,6 @@ const BillsPage = () => {
               {/* Desktop-only actions inline with title */}
               <div className="hidden sm:flex flex-nowrap items-center gap-2 flex-shrink-0">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Settlement Weeks</label>
                   {weeksLoading ? (
                     <div className="h-10 rounded-md bg-gray-200 animate-pulse min-w-[260px]" aria-label="Loading weeks" />
                   ) : (

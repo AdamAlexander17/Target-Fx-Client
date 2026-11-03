@@ -158,6 +158,7 @@ const ReportsExchangePage = () => {
     filters: columnFilters,
     requestFilters: columnRequestFilters,
     openColumn: openFilterColumn,
+    openRect: openFilterRect,
     openMenu: openColumnFilter,
     closeMenu: closeColumnFilter,
     setFilter: applyColumnFilterRaw,
@@ -1153,7 +1154,8 @@ const ReportsExchangePage = () => {
             onClear={() => clearColumnFilter(column.key)}
             onApply={filter => applyColumnFilter(column.key, filter)}
             onClose={closeColumnFilter}
-            anchorRef={{ current: filterRefs.current[column.key] }}
+            anchorRef={() => filterRefs.current[column.key]}
+            initialRect={openFilterRect}
           />
         )
       })()}

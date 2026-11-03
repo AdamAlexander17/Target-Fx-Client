@@ -905,31 +905,36 @@ const ClientDetailsMobileModal = ({ client, onClose, allPositionsCache, allOrder
     const now = serverNowDate()
     let fromDateObj, toDateObj
 
+    // Quick ranges span full calendar days: 00:00:00 of the first day to 23:59:59 of
+    // today — not a rolling Nx24h window ending at the current time.
+    const startOfDay = (date) => { const d = new Date(date); d.setHours(0, 0, 0, 0); return d }
+    const endOfToday = () => { const d = new Date(now); d.setHours(23, 59, 59, 999); return d }
+    const daysBack = (n) => { const d = new Date(now); d.setDate(now.getDate() - n); return startOfDay(d) }
+
     switch(filterType) {
       case 'today':
-        // Match desktop behavior: rolling last 24 hours
-        fromDateObj = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-        toDateObj = now
+        fromDateObj = startOfDay(now)
+        toDateObj = endOfToday()
         break
       case 'lastweek':
-        fromDateObj = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-        toDateObj = now
+        fromDateObj = daysBack(6)
+        toDateObj = endOfToday()
         break
       case 'lastmonth':
-        fromDateObj = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        toDateObj = now
+        fromDateObj = daysBack(29)
+        toDateObj = endOfToday()
         break
       case 'last3months':
-        fromDateObj = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-        toDateObj = now
+        fromDateObj = daysBack(89)
+        toDateObj = endOfToday()
         break
       case 'last6months':
-        fromDateObj = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000)
-        toDateObj = now
+        fromDateObj = daysBack(179)
+        toDateObj = endOfToday()
         break
       case 'allhistory':
         fromDateObj = new Date(now.getFullYear() - 2, 0, 1, 0, 0, 0)
-        toDateObj = now
+        toDateObj = endOfToday()
         break
       default:
         return

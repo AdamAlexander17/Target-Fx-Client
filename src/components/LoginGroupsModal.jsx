@@ -515,7 +515,7 @@ const LoginGroupsModal = ({
                 color: '#334155',
               }}
             >
-              Reset
+              Clear
             </button>
             {/* Apply */}
             <button

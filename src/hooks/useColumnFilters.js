@@ -5,6 +5,12 @@ import { columnFiltersForRequest, matchesColumnFilters, sortRowsByColumn } from 
 export default function useColumnFilters() {
   const [filters, setFilters] = useState({})
   const [openColumn, setOpenColumn] = useState(null)
+  const [openRect, setOpenRect] = useState(null)
+
+  const openMenu = useCallback((columnKey, rect = null) => {
+    setOpenColumn(columnKey)
+    setOpenRect(rect || null)
+  }, [])
 
   const setFilter = useCallback((columnKey, filter) => {
     setFilters(current => ({ ...current, [`${columnKey}_custom`]: filter }))
@@ -33,9 +39,10 @@ export default function useColumnFilters() {
     sortRows,
     setFilter,
     clearFilter,
-    clearAll: useCallback(() => { setFilters({}); setOpenColumn(null) }, []),
+    clearAll: useCallback(() => { setFilters({}); setOpenColumn(null); setOpenRect(null) }, []),
     openColumn,
-    openMenu: setOpenColumn,
-    closeMenu: () => setOpenColumn(null),
+    openRect,
+    openMenu,
+    closeMenu: () => { setOpenColumn(null); setOpenRect(null) },
   }
 }
