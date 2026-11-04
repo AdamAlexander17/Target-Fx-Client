@@ -181,7 +181,11 @@ export const fmtNumber = value => { const n = toNumber(value); return n === null
 export const fmtDate = value => {
   const n = toNumber(value)
   if (n === null) return '—'
-  return new Date(n * 1000).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+  // Read UTC fields: the server encodes its wall clock as if it were UTC, and
+  // toLocaleString would add the viewer's timezone (e.g. +5:30 on IST phones).
+  const d = new Date(n * 1000)
+  const p = v => String(v).padStart(2, '0')
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`
 }
 
 // A nested breakdown column is worth totalling when it is an amount or a count/size, not a rate.

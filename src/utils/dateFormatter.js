@@ -89,9 +89,7 @@ const apiTimeParts = (value) => {
   if (isFinite(n)) {
     const ms = toMs(n)
     if (!ms) return null
-    // API epochs are standard unix seconds (UTC). Shift to the trade server's
-    // wall clock (IST, UTC+5:30) so the displayed time matches the server clock.
-    const d = new Date(ms + SERVER_UTC_OFFSET_SEC * 1000)
+    const d = new Date(ms)
     return {
       day: d.getUTCDate(), month: d.getUTCMonth() + 1, year: d.getUTCFullYear(),
       hours: d.getUTCHours(), minutes: d.getUTCMinutes(), seconds: d.getUTCSeconds(), hasTime: true
