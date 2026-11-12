@@ -317,7 +317,7 @@ export default function AgentDetailsReportPage() {
       filterRef={node => { filterRefs.current[key] = node }}
       active={Boolean(columnFilters[`${key}_custom`])}
       onClick={openColumnFilter}
-      className={mobile ? 'ml-1 !h-4 !w-4' : 'ml-1'}
+      className={mobile ? 'ml-0.5' : 'ml-1'}
     />
   )
   const iconButton = 'h-10 w-9 md:h-8 md:w-8 shrink-0 rounded-xl md:rounded-md border border-[#E5E7EB] bg-white text-[#4B5563] shadow-sm flex items-center justify-center hover:bg-gray-50 disabled:opacity-40'

@@ -1,7 +1,7 @@
 import BrokerCreditSummary from '../components/BrokerCreditSummary'
 import QuickTimeFilter from '../components/QuickTimeFilter'
 import { getPresetRange, QUICK_FILTERS } from '../utils/dealTimePresets'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { brokerAPI } from '../services/api'
 import { useAuth } from '../contexts/authContextStore'
@@ -24,7 +24,8 @@ import ColumnChooserList from '../components/ColumnChooserList'
 import ColumnFilterMenu from '../components/ColumnFilterMenu'
 import ColumnFilterTrigger from '../components/ColumnFilterTrigger'
 import useColumnFilters from '../hooks/useColumnFilters'
-import { formatTime as apiFormatTime, serverNowDate, serverEpochFromParts, fromServerEpoch, toApiEpoch } from '../utils/dateFormatter'
+import { formatTime as apiFormatTime, apiTimeSecond, serverNowDate, serverEpochFromParts, fromServerEpoch } from '../utils/dateFormatter'
+import { matchesColumnFilter, rowFieldValue, sortRowsByColumn } from '../utils/columnFilters'
 import DateInputDMY from '../components/DateInputDMY'
 import { exportStyledExcel, actionColor } from '../utils/exportStyledExcel'
 
@@ -76,21 +77,84 @@ const getDealActionClass = (label) => {
   return 'bg-blue-50 text-blue-700'
 }
 
+// Use the same raw value for display, filtering, sorting and export. Returned
+// epochs already encode the displayed UTC wall clock: never offset them.
+const reportTimeValue = row => rowFieldValue(row, 'time', ['timeStr', 'dealTime', 'deal_time', 'timestamp', 'timestampStr', 'date'])
+const REPORT_TEXT_COLUMNS = new Set(['name', 'action', 'symbol', 'comment'])
+const reportFilterKind = key => key === 'time' ? 'date' : REPORT_TEXT_COLUMNS.has(key) ? 'text' : 'number'
+const REPORT_ALIASES = {
+  deal: ['id', 'ticket', 'dealId'], login: ['account', 'accountLogin'],
+  name: ['fullName', 'clientName'], action: ['type'], symbol: ['instrument'],
+  volume: ['lots'], price: ['dealPrice'], profit: ['pnl'], storage: ['swap'],
+  order: ['orderId', 'orderTicket'], position: ['positionId', 'positionTicket'], comment: ['comments'],
+}
+const reportRawValue = (row, key) => {
+  if (key === 'time') return apiTimeSecond(reportTimeValue(row))
+  const raw = rowFieldValue(row, key, REPORT_ALIASES[key] || [])
+  if (key === 'action') return getDealActionLabel(raw)
+  // Order/Position zeroes render as a dash, not a real identifier.
+  if (key === 'order' || key === 'position') return Number(raw) > 0 ? raw : ''
+  return raw
+}
+const reportSortValue = (row, key) => reportFilterKind(key) === 'text'
+  ? `text:${reportRawValue(row, key)}` : reportRawValue(row, key)
+const filterReportRows = (rows, filters) => rows.filter(row => Object.entries(filters || {}).every(([key, filter]) => {
+  if (!filter) return true
+  const column = key.replace(/_custom$/, '')
+  const value = reportRawValue(row, column)
+  const kind = reportFilterKind(column)
+  if (kind !== 'text' && (value === '' || !Number.isFinite(Number(value)))) return false
+  // Numeric-looking names/symbols are text, including leading zeroes.
+  const textEquality = kind === 'text' && ['equal', 'notEqual'].includes(filter.type)
+  return matchesColumnFilter(textEquality ? `text:${String(value).trim().toLowerCase()}` : value,
+    textEquality ? { ...filter, value1: `text:${String(filter.value1).trim().toLowerCase()}` } : filter)
+}))
+
+// A short page may be a server cap, not the last page. Unknown totals require
+// an empty page; repeated pages/incomplete responses must not publish partial data.
+const fetchReportDeals = async (getDeals, query, collectAll, signal, isCurrent, onProgress = () => {}) => {
+  const rows = [], seen = new Set()
+  let page = collectAll ? 1 : query.page
+  while (isCurrent() && !signal.aborted) {
+    const response = await getDeals(query.from, query.to, query.limit, page, query.extra, { signal })
+    if (!isCurrent() || signal.aborted) return null
+    const payload = response?.data ?? response ?? {}
+    const chunk = payload.deals ?? payload.items
+    if (!Array.isArray(chunk) || chunk.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('Invalid deals response')
+    const rawTotal = payload.pagination?.total ?? payload.total ?? payload.totalCount ?? payload.total_count
+    const count = rawTotal == null ? NaN : Number(rawTotal)
+    const total = Number.isFinite(count) && count >= 0 ? count : null
+    if (!collectAll) return { rows: chunk, total: total ?? chunk.length }
+    let added = 0
+    for (const row of chunk) {
+      const id = row.deal ?? row.id
+      const key = id == null || id === '' ? JSON.stringify(row) : String(id)
+      if (!seen.has(key)) { seen.add(key); rows.push(row); added++ }
+    }
+    if (chunk.length && !added) throw new Error('Deals pagination did not advance')
+    if (!chunk.length && total > rows.length) throw new Error('Deals response is incomplete')
+    onProgress({ done: rows.length, total: total ?? rows.length })
+    if (!chunk.length || (total !== null && rows.length >= total)) return { rows, total: rows.length }
+    page++
+  }
+  return null
+}
+
 const COLUMNS = [
-  { key: 'deal', label: 'Deal', get: d => d.deal ?? d.id ?? '-' },
-  { key: 'time', label: 'Time', get: d => formatTime(d.time ?? d.timeStr) },
-  { key: 'login', label: 'Login', get: d => d.login ?? '-' },
-  { key: 'name', label: 'Name', get: d => d.name || '-' },
-  { key: 'action', label: 'Action', get: d => getDealActionLabel(d.action) },
-  { key: 'symbol', label: 'Symbol', get: d => d.symbol || '-' },
-  { key: 'volume', label: 'Volume', numeric: true, get: d => Number(d.volume || 0) },
-  { key: 'price', label: 'Price', numeric: true, get: d => Number(d.price || 0) },
-  { key: 'profit', label: 'Profit', numeric: true, get: d => Number(d.profit || 0) },
-  { key: 'commission', label: 'Commission', numeric: true, get: d => Number(d.commission || 0) },
-  { key: 'storage', label: 'Swap', numeric: true, get: d => Number(d.storage || 0) },
-  { key: 'order', label: 'Order', get: d => Number(d.order) > 0 ? d.order : '-' },
-  { key: 'position', label: 'Position', get: d => Number(d.position) > 0 ? d.position : '-' },
-  { key: 'comment', label: 'Comment', get: d => d.comment || '' }
+  { key: 'deal', label: 'Deal', get: d => reportRawValue(d, 'deal') || '-' },
+  { key: 'time', label: 'Time', get: d => formatTime(reportTimeValue(d)) },
+  { key: 'login', label: 'Login', get: d => reportRawValue(d, 'login') || '-' },
+  { key: 'name', label: 'Name', get: d => reportRawValue(d, 'name') || '-' },
+  { key: 'action', label: 'Action', get: d => reportRawValue(d, 'action') },
+  { key: 'symbol', label: 'Symbol', get: d => reportRawValue(d, 'symbol') || '-' },
+  { key: 'volume', label: 'Volume', numeric: true, get: d => Number(reportRawValue(d, 'volume') || 0) },
+  { key: 'price', label: 'Price', numeric: true, get: d => Number(reportRawValue(d, 'price') || 0) },
+  { key: 'profit', label: 'Profit', numeric: true, get: d => Number(reportRawValue(d, 'profit') || 0) },
+  { key: 'commission', label: 'Commission', numeric: true, get: d => Number(reportRawValue(d, 'commission') || 0) },
+  { key: 'storage', label: 'Swap', numeric: true, get: d => Number(reportRawValue(d, 'storage') || 0) },
+  { key: 'order', label: 'Order', get: d => reportRawValue(d, 'order') || '-' },
+  { key: 'position', label: 'Position', get: d => reportRawValue(d, 'position') || '-' },
+  { key: 'comment', label: 'Comment', get: d => reportRawValue(d, 'comment') }
 ]
 
 // Mobile grid: Login first and sticky, like the other mobile modules
@@ -270,7 +334,6 @@ const DealsReportPage = () => {
   const [sortOrder, setSortOrder] = useState('desc')
   const {
     filters: columnFilters,
-    requestFilters: columnRequestFiltersRaw,
     openColumn: openFilterColumn,
     openRect: openFilterRect,
     openMenu: openColumnFilter,
@@ -278,43 +341,17 @@ const DealsReportPage = () => {
     setFilter: applyColumnFilterRaw,
     clearFilter: clearColumnFilterRaw,
   } = useColumnFilters()
-  // Memoized: a fresh array each render would retrigger the load effect endlessly.
-  const columnRequestFilters = useMemo(
-    () => columnRequestFiltersRaw.filter(item => item.field !== 'time'),
-    [columnRequestFiltersRaw]
-  )
   const applyColumnFilter = (columnKey, filter) => {
     applyColumnFilterRaw(columnKey, filter)
-    if (columnKey === 'time') {
-      // The API reads from/to as standard unix epochs; picked wall-clock
-      // fields must be shifted back by the server offset or the window
-      // lands hours away from the deals shown in the table.
-      const from = toApiEpoch(filter.value1)
-      const to = toApiEpoch(filter.type === 'between' ? filter.value2 : filter.value1)
-      if (filter.type === 'between') setRange({ from, to })
-      else if (filter.type === 'greaterThanOrEqual') setRange(previous => ({ ...previous, from }))
-      else if (filter.type === 'lessThanOrEqual') setRange(previous => ({ ...previous, to }))
-      else if (filter.type === 'equal') setRange({ from, to })
-      // notEqual cannot be expressed as a single range; leave the range unchanged.
-    }
     setPage(1)
   }
   const filterRefs = useRef({})
   const clearColumnFilter = columnKey => {
     clearColumnFilterRaw(columnKey)
-    if (columnKey === 'time') {
-      // Restore the active date range so clearing TIME really un-filters.
-      if (preset === 'custom' && customFrom && customTo) {
-        setRange({ from: ymdToEpoch(customFrom), to: ymdToEpoch(customTo, true) })
-      } else {
-        const next = getPresetRange(preset)
-        if (next) setRange(next)
-      }
-    }
     setPage(1)
   }
-  const [deals, setDeals] = useState([])
-  const [total, setTotal] = useState(0)
+  const hasColumnFilters = Object.values(columnFilters).some(Boolean)
+  const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [exportProgress, setExportProgress] = useState(null)
   const [error, setError] = useState('')
@@ -371,48 +408,57 @@ const DealsReportPage = () => {
       filters.push({ field: 'action', operator: 'not_equal', value: 'BUY' })
       filters.push({ field: 'action', operator: 'not_equal', value: 'SELL' })
     }
-    filters.push(...columnRequestFilters)
+    // Column conditions are local only: unsupported server conditions could
+    // remove valid candidates before we can validate them. Retain base controls.
     if (filters.length) body.filters = filters
     return body
   }
 
+  // Key results to their entire query so an old page cannot flash while a new
+  // effect starts. Local page changes reuse the complete candidate collection.
+  const queryKey = JSON.stringify({ from: range.from, to: range.to, extra: buildExtraBody(),
+    page: hasColumnFilters ? 1 : page, limit: hasColumnFilters ? EXPORT_CHUNK : effectivePageSize,
+    columnFilters, hasColumnFilters, reloadKey, isAuthenticated })
+  const currentQueryRef = useRef(queryKey)
+  currentQueryRef.current = queryKey
   useEffect(() => {
-    if (!isAuthenticated) return undefined
     if (previousGroupKey.current !== groupKey) {
       previousGroupKey.current = groupKey
-      if (page !== 1) {
-        setPage(1)
-        return undefined
-      }
+      setPage(1)
     }
-    let cancelled = false
+  }, [groupKey])
+  useEffect(() => {
+    const query = JSON.parse(queryKey)
+    if (!query.isAuthenticated) return undefined
+    const controller = new AbortController()
+    const isCurrent = () => currentQueryRef.current === queryKey && !controller.signal.aborted
     const load = async () => {
       setLoading(true)
       setError('')
       try {
-        const response = await brokerAPI.getAllDeals(range.from, range.to, effectivePageSize, page, buildExtraBody())
-        if (cancelled) return
-        const payload = response?.data ?? response ?? {}
-        const rows = payload?.deals || payload?.items || []
-        const apiTotal = payload?.pagination?.total ?? payload?.total ?? payload?.totalCount ?? payload?.total_count
-        setDeals(Array.isArray(rows) ? rows : [])
-        setTotal(apiTotal != null ? Number(apiTotal) || 0 : rows.length)
+        const next = await fetchReportDeals(brokerAPI.getAllDeals, query, query.hasColumnFilters, controller.signal, isCurrent)
+        if (!next || !isCurrent()) return
+        const rows = query.hasColumnFilters ? filterReportRows(next.rows, query.columnFilters) : next.rows
+        setResult({ key: queryKey, rows, total: query.hasColumnFilters ? rows.length : next.total })
       } catch (requestError) {
-        if (!cancelled) {
+        if (isCurrent()) {
           setError(requestError?.response?.data?.message || requestError?.message || 'Failed to load deals')
-          setDeals([])
-          setTotal(0)
+          setResult(null)
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (isCurrent()) setLoading(false)
       }
     }
     load()
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range, search, moduleFilter, isAuthenticated, page, effectivePageSize, sortBy, sortOrder, reloadKey, groupKey, columnRequestFilters])
+    return () => controller.abort()
+  }, [queryKey])
 
+  const currentResult = result?.key === queryKey ? result : null
+  const total = currentResult?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / effectivePageSize))
+  const deals = !currentResult ? [] : hasColumnFilters
+    ? sortRowsByColumn(currentResult.rows, reportSortValue, sortBy, sortOrder).slice((page - 1) * effectivePageSize, page * effectivePageSize)
+    : currentResult.rows
 
   const handleSort = (key) => {
     if (sortBy === key) setSortOrder(value => value === 'asc' ? 'desc' : 'asc')
@@ -431,7 +477,7 @@ const DealsReportPage = () => {
       filterRef={node => { filterRefs.current[column.key] = node }}
       active={Boolean(columnFilters[`${column.key}_custom`])}
       onClick={openColumnFilter}
-      className={mobile ? 'ml-1 !h-4 !w-4' : 'ml-1'}
+      className={mobile ? 'ml-0.5' : 'ml-1'}
     />
   )
 
@@ -473,27 +519,18 @@ const DealsReportPage = () => {
     exportControllerRef.current = controller
     setExportProgress({ done: 0, total })
     try {
-      const extra = buildExtraBody()
-      const getPayload = (res) => res?.data ?? res ?? {}
-      const first = getPayload(await brokerAPI.getAllDeals(range.from, range.to, EXPORT_CHUNK, 1, extra, { signal: controller.signal }))
-      if (controller.signal.aborted) return
-      let rows = first?.deals || first?.items || []
-      const exportTotal = Number(first?.pagination?.total ?? first?.total ?? first?.totalCount ?? first?.total_count ?? rows.length) || rows.length
-      const pages = Math.ceil(exportTotal / EXPORT_CHUNK)
-      setExportProgress({ done: rows.length, total: exportTotal })
-      for (let p = 2; p <= pages; p++) {
-        const payload = getPayload(await brokerAPI.getAllDeals(range.from, range.to, EXPORT_CHUNK, p, extra, { signal: controller.signal }))
-        if (controller.signal.aborted) return
-        const chunk = payload?.deals || payload?.items || []
-        if (!chunk.length) break
-        rows = rows.concat(chunk)
-        setExportProgress({ done: rows.length, total: exportTotal })
-      }
-      if (controller.signal.aborted || !rows.length) return
+      const isCurrent = () => !controller.signal.aborted && currentQueryRef.current === queryKey
+      const next = await fetchReportDeals(brokerAPI.getAllDeals,
+        { from: range.from, to: range.to, limit: EXPORT_CHUNK, page: 1, extra: buildExtraBody() },
+        true, controller.signal, isCurrent, progress => { if (isCurrent()) setExportProgress(progress) })
+      if (!next || !isCurrent()) return
+      const filtered = filterReportRows(next.rows, columnFilters)
+      const rows = hasColumnFilters ? sortRowsByColumn(filtered, reportSortValue, sortBy, sortOrder) : filtered
+      if (!rows.length) return
       const stamp = toYmd(serverNowDate())
       // Excel columns follow the visible table columns; Time is split into Date + Time
       const SIGNED = new Set(['profit', 'commission', 'storage'])
-      const priceDigits = Math.min(5, Math.max(2, ...rows.map(d => (String(d.price ?? '').split('.')[1] || '').length)))
+      const priceDigits = Math.min(5, Math.max(2, ...rows.map(d => (String(reportRawValue(d, 'price')).split('.')[1] || '').length)))
       const excelColumns = shownColumns.flatMap(c => {
         if (c.key === 'time') {
           const parts = (d) => String(c.get(d) || '').split(' ')
@@ -503,10 +540,10 @@ const DealsReportPage = () => {
           ]
         }
         if (c.key === 'action') return [{ key: c.key, label: c.label, value: c.get, align: 'center', colorFor: actionColor }]
-        if (c.numeric) return [{ key: c.key, label: c.label, value: c.key, type: 'number', digits: c.key === 'price' ? priceDigits : 2, signed: SIGNED.has(c.key) }]
+        if (c.numeric) return [{ key: c.key, label: c.label, value: c.get, type: 'number', digits: c.key === 'price' ? priceDigits : 2, signed: SIGNED.has(c.key) }]
         return [{ key: c.key, label: c.label, value: c.get }]
       })
-      const sum = (key) => rows.reduce((total, d) => total + (Number(d[key]) || 0), 0)
+      const sum = (key) => rows.reduce((total, d) => total + (Number(reportRawValue(d, key)) || 0), 0)
       exportStyledExcel({
         showTitle: false,
         columns: excelColumns,
@@ -518,7 +555,7 @@ const DealsReportPage = () => {
         fileName: `deals_${preset}_${stamp}.csv`
       })
     } catch (exportError) {
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted || currentQueryRef.current !== queryKey) return
       setError(exportError?.response?.data?.message || exportError?.message || 'Failed to export deals')
     } finally {
       if (exportControllerRef.current === controller) {
@@ -530,13 +567,14 @@ const DealsReportPage = () => {
 
   const renderCell = (column, deal) => {
     const value = column.get(deal)
-    if (column.key === 'login' && deal.login != null && String(deal.login).trim() !== '' && deal.login !== '-') {
+    const login = reportRawValue(deal, 'login')
+    if (column.key === 'login' && login !== '' && login !== '-') {
       return (
         <button
           type="button"
-          onClick={() => setSelectedClient({ login: deal.login, name: deal.name || '' })}
+          onClick={() => setSelectedClient({ login, name: reportRawValue(deal, 'name') })}
           className="text-blue-600 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 rounded-sm"
-          aria-label={`Open client details for ${deal.login}`}
+          aria-label={`Open client details for ${login}`}
         >
           {value}
         </button>
@@ -1007,7 +1045,7 @@ const DealsReportPage = () => {
         return (
           <ColumnFilterMenu
             label={column.label}
-            kind={column.key === 'time' ? 'date' : column.numeric ? 'number' : 'text'}
+            kind={reportFilterKind(column.key)}
             value={columnFilters[`${column.key}_custom`] || null}
             sortDirection={sortBy === column.key ? sortOrder : null}
             onSort={direction => sortColumnBy(column.key, direction)}

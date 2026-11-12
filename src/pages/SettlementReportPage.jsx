@@ -287,7 +287,7 @@ export default function SettlementReportPage() {
       filterRef={node => { filterRefs.current[column.key] = node }}
       active={Boolean(columnFilters[`${column.key}_custom`])}
       onClick={openColumnFilter}
-      className={mobile ? 'ml-1 !h-4 !w-4' : 'ml-1'}
+      className={mobile ? 'ml-0.5' : 'ml-1'}
     />
   )
   const displayRows = sortRows(filterRows(rows, (row, key) => row?.[key]), (row, key) => row?.[key], sortBy, sortOrder)

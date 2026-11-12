@@ -62,6 +62,9 @@ export const GroupProvider = ({ children }) => {
   const skipNextDebouncedSyncRef = useRef(false)
   // Timestamp used to avoid immediate API re-fetch overriding fresh local mutations.
   const lastLocalMutationAtRef = useRef(0)
+  // True only after the initial GET succeeded with the server's real list. Mutations
+  // must never PUT before this, or a failed load would overwrite server groups.
+  const hydratedFromApiRef = useRef(false)
 
   // Track active group per module — cleared on page refresh
   const [activeGroupFilters, setActiveGroupFilters] = useState({})
@@ -83,6 +86,7 @@ export const GroupProvider = ({ children }) => {
       const raw = extractFiltersArray(res)
       const loaded = fromApiFilters(raw)
       skipNextDebouncedSyncRef.current = true
+      hydratedFromApiRef.current = true
       groupsRef.current = loaded
       setGroups(loaded)
       console.log('[Groups] Refreshed from API:', loaded.length, 'groups')
@@ -94,10 +98,22 @@ export const GroupProvider = ({ children }) => {
     }
   }, [])
 
-  // ── API: load groups on mount ─────────────────────────────────────────────
+  // ── API: load groups on mount / on login ──────────────────────────────────
   useEffect(() => {
     let cancelled = false
+    let attempts = 0
+    let timer = null
+    const MAX_ATTEMPTS = 5
+
+    const hasToken = () => { try { return !!localStorage.getItem('access_token') } catch { return false } }
+
     const load = async () => {
+      // Don't fire before the auth token exists — the request would 401 and the
+      // groups would look empty until a manual refresh.
+      if (!hasToken()) {
+        if (!cancelled && attempts < MAX_ATTEMPTS) { attempts += 1; timer = setTimeout(load, 300) }
+        return
+      }
       try {
         const res = await brokerAPI.getSavedFilters()
         if (cancelled) return
@@ -105,21 +121,47 @@ export const GroupProvider = ({ children }) => {
         const loaded = fromApiFilters(raw)
         setGroups(loaded)
         console.log('[Groups] Loaded from API:', loaded.length, 'groups')
+        // Only mark loaded (which arms the auto-sync) after a real successful read,
+        // so a failed first load never lets a later mutation PUT an empty list.
+        hydratedFromApiRef.current = true
+        setGroupsLoaded(true)
       } catch (err) {
-        setGroups([])
-        console.warn('[Groups] Failed to load from API:', err?.message)
-      } finally {
-        if (!cancelled) setGroupsLoaded(true)
+        attempts += 1
+        console.warn(`[Groups] Failed to load from API (attempt ${attempts}/${MAX_ATTEMPTS}):`, err?.message)
+        // Keep existing in-memory groups; do NOT wipe them on a failed read.
+        if (!cancelled && attempts < MAX_ATTEMPTS) {
+          timer = setTimeout(load, 800 * attempts)
+        }
+        // groupsLoaded stays false on persistent failure, so syncToApi stays disarmed.
       }
     }
+
+    // Re-run the load whenever a fresh login completes (covers logout -> login).
+    const onLogin = () => {
+      attempts = 0
+      hydratedFromApiRef.current = false
+      setGroupsLoaded(false)
+      if (timer) clearTimeout(timer)
+      load()
+    }
+    window.addEventListener('auth:login', onLogin)
+
     load()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      window.removeEventListener('auth:login', onLogin)
+    }
   }, [])
 
   // ── API: persist groups whenever they change (debounced 400 ms) ───────────
   const syncToApi = useCallback((nextGroups, options = {}) => {
     const immediate = options.immediate === true
     const doSync = async () => {
+      if (!hydratedFromApiRef.current) {
+        console.warn('[Groups] Skipped sync: groups not yet loaded from API, refusing to overwrite server state')
+        return
+      }
       try {
         await brokerAPI.putSavedFilters(toApiFilters(nextGroups))
         console.log('[Groups] Synced to API:', nextGroups.length, 'groups')

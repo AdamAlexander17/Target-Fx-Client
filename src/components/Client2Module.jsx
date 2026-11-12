@@ -12,6 +12,10 @@ import LoginGroupsModal from './LoginGroupsModal'
 import LoginGroupModal from './LoginGroupModal'
 import ClientDetailsMobileModal from './ClientDetailsMobileModal'
 import ColumnChooserList from './ColumnChooserList'
+import ColumnFilterTrigger from './ColumnFilterTrigger'
+import ColumnFilterMenu from './ColumnFilterMenu'
+import useColumnFilters from '../hooks/useColumnFilters'
+import { columnFiltersForRequest, matchesColumnFilter, rowFieldValue, sortRowsByColumn } from '../utils/columnFilters'
 import { useGroups } from '../contexts/groupContextStore'
 import { useData } from '../contexts/dataContextStore'
 import { brokerAPI } from '../services/api'
@@ -32,6 +36,128 @@ const formatCompactIndian = (v) => {
   if (abs >= 1e5) return sign + (abs / 1e5).toFixed(2) + 'L'
   if (abs >= 1e3) return sign + (abs / 1e3).toFixed(2) + 'K'
   return sign + abs.toFixed(2)
+}
+
+// Match Client2Page's API fields and types, not formatted cell strings (K/L/Cr,
+// date labels, or the percentage display variants).
+const CLIENT2_NUMBER_COLUMNS = new Set([
+  'login', 'pnl', 'profit', 'equity', 'balance', 'credit', 'margin',
+  'marginFree', 'marginLevel', 'leverage', 'applied_percentage', 'storage'
+])
+const CLIENT2_DATE_COLUMNS = new Set(['registration', 'lastAccess', 'accountLastUpdate', 'userLastUpdate'])
+const getColumnFilterKind = key => CLIENT2_DATE_COLUMNS.has(key) ? 'date' : CLIENT2_NUMBER_COLUMNS.has(key) ? 'number' : 'text'
+
+const buildClient2ColumnFilters = filters => {
+  // The shared menu calls this condition doesNotContain; the serializer uses
+  // notContains. Normalize here without changing shared files or menu state.
+  const normalized = Object.fromEntries(Object.entries(filters).map(([key, filter]) => [
+    key, filter.type === 'doesNotContain' ? { ...filter, type: 'notContains' } : filter
+  ]))
+  const requests = columnFiltersForRequest(normalized)
+    .filter(filter => !['tradingEnabled', 'accountEnabled', 'applied_percentage_is_custom'].includes(filter.field))
+    .map(filter => ({
+      ...filter,
+      // Client2's desktop search uses these inclusive comparison aliases.
+      operator: filter.operator === 'greater_than_or_equal' ? 'greater_than_equal'
+        : filter.operator === 'less_than_or_equal' ? 'less_than_equal' : filter.operator,
+      value: String(filter.value)
+    }))
+
+  // Evaluate conditions against the labels users actually see, then send the
+  // matching underlying boolean values to the server (never filter one page).
+  for (const field of ['tradingEnabled', 'accountEnabled', 'applied_percentage_is_custom']) {
+    const filter = normalized[`${field}_custom`]
+    if (!filter) continue
+    const enabledLabels = field === 'applied_percentage_is_custom' ? ['true'] : ['Enabled', 'true']
+    const disabledLabels = field === 'applied_percentage_is_custom' ? ['false'] : ['Disabled', 'false']
+    const labels = /^(true|false|1|0)$/i.test(String(filter.value1).trim())
+      ? ['true', 'false'] : [enabledLabels[0], disabledLabels[0]]
+    const condition = /^(1|0)$/.test(String(filter.value1).trim())
+      ? { ...filter, value1: String(filter.value1).trim() === '1' ? 'true' : 'false' } : filter
+    const values = labels.flatMap((label, index) => matchesColumnFilter(label, condition) ? [index === 0 ? 'true' : 'false'] : [])
+    if (values.length) requests.push({ field, operator: 'in', value: values })
+    else requests.push({ field, operator: 'equal', value: 'true' }, { field, operator: 'equal', value: 'false' })
+  }
+  return requests
+}
+
+const CLIENT2_BOOLEAN_COLUMNS = new Set(['tradingEnabled', 'accountEnabled', 'applied_percentage_is_custom'])
+const CLIENT2_RAW_ALIASES = {
+  name: ['fullName', 'clientName', 'email'], phone: ['phoneNo', 'phone_number'],
+  profit: ['floating', 'floatingProfit'], marginFree: ['freeMargin'], storage: ['swap'],
+  registration: ['registrationTime', 'registrationStr'], lastAccess: ['lastAccessTime', 'lastAccessStr'],
+  accountLastUpdate: ['accountLastUpdateTime', 'accountLastUpdateStr'],
+  userLastUpdate: ['userLastUpdateTime', 'userLastUpdateStr']
+}
+const client2RawValue = (row, key) => {
+  const raw = rowFieldValue(row, key, CLIENT2_RAW_ALIASES[key] || [])
+  if (CLIENT2_BOOLEAN_COLUMNS.has(key)) {
+    const value = String(raw).trim().toLowerCase()
+    return ['true', '1', 'enabled'].includes(value) ? 'true'
+      : ['false', '0', 'disabled'].includes(value) ? 'false' : ''
+  }
+  if (!CLIENT2_DATE_COLUMNS.has(key) || raw === '') return raw
+  const number = Number(raw)
+  if (Number.isFinite(number)) return number >= 1e10 ? number / 1000 : number
+  // API strings encode server wall time, just like the epoch sent by the menu.
+  const text = String(raw).trim().replace(/^(\d{4})[./](\d{2})[./](\d{2})/, '$1-$2-$3')
+    .replace(/^(\d{2})[./](\d{2})[./](\d{4})/, '$3-$2-$1').replace(' ', 'T')
+    .replace(/(?:Z|[+-]\d{2}:?\d{2})$/, '')
+  const parsed = Date.parse(text + (text.includes('T') ? 'Z' : 'T00:00:00Z'))
+  return Number.isFinite(parsed) ? parsed / 1000 : ''
+}
+const client2FilterRows = (rows, filters) => {
+  const booleanRequests = buildClient2ColumnFilters(filters).filter(filter => CLIENT2_BOOLEAN_COLUMNS.has(filter.field))
+  return rows.filter(row => row != null && client2RawValue(row, 'login') !== ''
+    && Object.entries(filters).every(([key, filter]) => {
+      const column = key.replace(/_custom$/, '')
+      if (CLIENT2_BOOLEAN_COLUMNS.has(column)) return true
+      const value = client2RawValue(row, column)
+      if (value === '' && getColumnFilterKind(column) !== 'text') return false
+      const condition = { ...filter, type: filter.type === 'doesNotContain' ? 'notContains' : filter.type }
+      const textEquality = getColumnFilterKind(column) === 'text' && ['equal', 'notEqual'].includes(condition.type)
+      return matchesColumnFilter(textEquality ? `text:${String(value).trim().toLowerCase()}` : value,
+        textEquality ? { ...condition, value1: `text:${String(condition.value1).trim().toLowerCase()}` } : condition)
+    }) && booleanRequests.every(filter => filter.operator === 'in'
+      ? filter.value.includes(client2RawValue(row, filter.field)) : client2RawValue(row, filter.field) === filter.value))
+}
+const client2SortValue = (row, key) => getColumnFilterKind(key) === 'text'
+  ? `text:${client2RawValue(row, key)}` : client2RawValue(row, key)
+
+// Column-filter queries collect every candidate page before validating locally.
+// Never publish a partial collection if pagination is broken or superseded.
+const fetchClient2Results = async (searchClients, params, filters, signal, isCurrent) => {
+  const collectAll = Object.keys(filters).length > 0
+  const rows = []
+  const seen = new Set()
+  let page = collectAll ? 1 : params.page
+  while (isCurrent() && !signal.aborted) {
+    const response = await searchClients({ ...params, page }, { signal, timeout: 15000 })
+    if (!isCurrent() || signal.aborted) return null
+    const data = response?.data?.data ?? response?.data ?? response
+    if (!Array.isArray(data?.clients) || data.clients.some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
+      throw new Error('Invalid Client2 response')
+    }
+    if (!collectAll) return data
+    const rawTotal = data.total ?? data.totalClients
+    const total = rawTotal == null ? null : Number(rawTotal)
+    const validTotal = Number.isFinite(total) && total >= 0 ? total : null
+    const pages = data.pages == null ? null : Number(data.pages)
+    let added = 0
+    for (const row of data.clients) {
+      const id = client2RawValue(row, 'login')
+      const key = id === '' ? JSON.stringify(row) : String(id)
+      if (!seen.has(key)) { seen.add(key); rows.push(row); added++ }
+    }
+    if (data.clients.length && !added) throw new Error('Client2 pagination did not advance')
+    if (!data.clients.length || (validTotal > 0 && rows.length >= validTotal)
+      || (Number.isFinite(pages) && pages > 0 && page >= pages)
+      || (validTotal === null && pages === null && data.clients.length < params.limit)) {
+      return { clients: client2FilterRows(rows, filters) }
+    }
+    page++
+  }
+  return null
 }
 
 export default function Client2Module() {
@@ -77,6 +203,27 @@ export default function Client2Module() {
   const [sortColumn, setSortColumn] = useState(null)
   const [sortDirection, setSortDirection] = useState('asc')
   const [dragStartLabel, setDragStartLabel] = useState(null)
+  const columnFilters = useColumnFilters()
+  const columnFilterRefs = useRef({})
+  const apiColumnFilters = useMemo(() => buildClient2ColumnFilters(columnFilters.filters), [columnFilters.filters])
+  const hasColumnFilters = Object.keys(columnFilters.filters).length > 0
+  const requestPage = hasColumnFilters ? 1 : currentPage
+  const activeGroupName = getActiveGroupFilter('client2')
+  const clientResultKey = JSON.stringify([columnFilters.filters, filters, debouncedSearchInput,
+    activeGroupName, groups, sortColumn, sortDirection, showPercent, currencyMode, hasColumnFilters ? null : currentPage])
+  const latestResultKeyRef = useRef(clientResultKey)
+  latestResultKeyRef.current = clientResultKey
+  const [serverResultKey, setServerResultKey] = useState(null)
+  const hasCurrentClients = serverResultKey === clientResultKey
+
+  const applyColumnFilter = (key, filter) => {
+    setCurrentPage(1)
+    columnFilters.setFilter(key, filter)
+  }
+  const clearColumnFilter = key => {
+    setCurrentPage(1)
+    columnFilters.clearFilter(key)
+  }
 
 
   const [touchStartX, setTouchStartX] = useState(null)
@@ -278,16 +425,16 @@ export default function Client2Module() {
       isFetchingRef.current = true
       const usePercent = overridePercent !== null ? overridePercent : showPercent
 
-      // Build payload - always use itemsPerPage (12) for mobile pagination
+      // The API narrows candidates; active column conditions are also checked locally.
       const payload = {
-        page: currentPage,
+        page: requestPage,
         limit: itemsPerPage,
         percentage: usePercent,
         currency: currencyMode
       }
 
       // Add filters to payload (server-side filtering like desktop)
-      const apiFilters = []
+      const apiFilters = [...apiColumnFilters]
       if (filters.hasFloating) {
         apiFilters.push({ field: 'profit', operator: 'not_equal', value: '0' })
       }
@@ -345,22 +492,21 @@ export default function Client2Module() {
 
       // Run API call and minimum skeleton timer in parallel (initial load only)
       const minTimer = isInitialLoad ? new Promise(r => setTimeout(r, 600)) : Promise.resolve()
-      const [response] = await Promise.all([
-        brokerAPI.searchClients(payload, { signal: abortControllerRef.current.signal, timeout: 15000 }),
+      const signal = abortControllerRef.current.signal
+      const isCurrent = () => currentRequestId === requestIdRef.current && latestResultKeyRef.current === clientResultKey
+      const [data] = await Promise.all([
+        fetchClient2Results((query, options) => brokerAPI.searchClients(query, options), payload,
+          columnFilters.filters, signal, isCurrent),
         minTimer
       ])
 
       // Ignore response if it's from an outdated request (stale data)
       // Do NOT clear isLoading here — the newer request owns the loading state
-      if (currentRequestId !== requestIdRef.current) {
+      if (!data || !isCurrent() || signal.aborted) {
         console.log('[Client2Module] Ignoring stale response from request', currentRequestId, '(current:', requestIdRef.current, ')')
-        isFetchingRef.current = false
         return
       }
 
-      // Extract data from response.data.data structure
-      const responseData = response?.data || {}
-      const data = responseData?.data || responseData
       const t = data.totals || {}
 
       // Debug: Log first client to verify percentage fields
@@ -377,6 +523,7 @@ export default function Client2Module() {
       }
 
       setClients(data.clients || [])
+      setServerResultKey(clientResultKey)
       setTotals(t)
       setTotalClients(data.total ?? data.totalClients ?? data.clients?.length ?? 0)
       // Update total pages from API response if available
@@ -390,7 +537,7 @@ export default function Client2Module() {
       // Cards are now computed via useMemo based on filtered clients
     } catch (error) {
       // Ignore request cancellations caused by AbortController
-      if (currentRequestId !== requestIdRef.current) { isFetchingRef.current = false; return }
+      if (currentRequestId !== requestIdRef.current || latestResultKeyRef.current !== clientResultKey) return
       const isCanceled = error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED' || /aborted|canceled/i.test(error?.message || '')
       if (isCanceled) {
         // Do NOT clear isLoading — the replacement request that triggered this abort owns the loading state
@@ -404,12 +551,12 @@ export default function Client2Module() {
       }
       isFetchingRef.current = false
     }
-  }, [showPercent, filters, getActiveGroupFilter, groups, currentPage, sortColumn, sortDirection, debouncedSearchInput, currencyMode])
+  }, [showPercent, filters, apiColumnFilters, columnFilters.filters, clientResultKey, getActiveGroupFilter, groups, requestPage, sortColumn, sortDirection, debouncedSearchInput, currencyMode])
 
   // Reset to page 1 when filters, search, or IB changes
   useEffect(() => {
     setCurrentPage(1)
-  }, [filters, debouncedSearchInput, getActiveGroupFilter('client2')])
+  }, [filters, debouncedSearchInput, activeGroupName])
 
   // Initial fetch and periodic refresh every 1 second (matching desktop)
   useEffect(() => {
@@ -420,6 +567,8 @@ export default function Client2Module() {
     }, 5000) // Periodic refresh every 5s (skip if in-flight or modal open)
     return () => {
       requestIdRef.current++
+      abortControllerRef.current?.abort()
+      isFetchingRef.current = false
       clearInterval(interval)
     }
   }, [fetchClients])
@@ -435,20 +584,46 @@ export default function Client2Module() {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [fetchClients])
 
-  // Return clients as-is since search is handled server-side via API
+  // Reject stale query rows before the fetch effect runs. Active filters use
+  // raw base fields, independent of compact and percentage display modes.
   const filteredClients = useMemo(() => {
-    if (!Array.isArray(clients)) return []
-    return clients.filter(c => c != null && c.login != null)
-  }, [clients])
+    if (!hasCurrentClients || !Array.isArray(clients)) return []
+    const candidates = client2FilterRows(clients, columnFilters.filters)
+    if (!hasColumnFilters) return candidates
+    const group = groups?.find(group => group.name === activeGroupName)
+    const logins = group?.loginIds?.length ? new Set(group.loginIds.map(String)) : null
+    const matches = candidates.filter(client => {
+      const value = key => Number(client2RawValue(client, key))
+      const login = client2RawValue(client, 'login')
+      return (!filters.hasFloating || value('profit') !== 0)
+        && (!filters.hasCredit || value('credit') > 0)
+        && (!filters.noDeposit || value('lifetimeDeposit') === 0)
+        && (!filters.hasPnl || value('pnl') !== 0)
+        && (!group?.range || (Number(login) >= Number(group.range.from) && Number(login) <= Number(group.range.to)))
+        && (group?.range || !logins || logins.has(String(login)))
+    })
+    return sortRowsByColumn(matches, client2SortValue, sortColumn, sortDirection)
+  }, [clients, hasCurrentClients, columnFilters.filters, hasColumnFilters, groups, activeGroupName, filters, sortColumn, sortDirection])
 
-  // Calculate cards from API totals (filters are handled server-side)
+  const filteredTotals = useMemo(() => {
+    if (!hasCurrentClients) return {}
+    if (!hasColumnFilters) return totals
+    return Object.fromEntries(['pnl', 'floating', 'balance', 'credit', 'equity'].map(key => [key,
+      filteredClients.reduce((sum, client) => {
+        const field = key === 'floating' ? 'profit' : key
+        const value = showPercent ? rowFieldValue(client, `${field}_percentage`, key === 'floating' ? ['floating_percentage'] : [])
+          : client2RawValue(client, field)
+        return sum + (Number(value) || 0)
+      }, 0)
+    ]))
+  }, [filteredClients, hasCurrentClients, hasColumnFilters, totals, showPercent])
+
+  // Unfiltered queries retain API totals; filtered totals cover all local matches.
   const cards = useMemo(() => {
-    // Always use API totals since filters are server-side
     const addPercent = (label) => showPercent ? `${label} %` : label
-    const t = totals || {}
+    const t = filteredTotals || {}
 
-    // Use totalClients for count
-    const clientCount = totalClients || 0
+    const clientCount = hasCurrentClients ? (hasColumnFilters ? filteredClients.length : totalClients) : 0
 
     // Only show 6 face cards as requested
     return [
@@ -459,7 +634,7 @@ export default function Client2Module() {
       { label: addPercent('Equity'), value: fmtMoney(t.equity || 0), unit: 'USD', numericValue: t.equity || 0 },
       { label: 'Total Clients', value: Number(clientCount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 }), unit: 'Count', numericValue: clientCount },
     ]
-  }, [filteredClients, totals, totalClients, filters, getActiveGroupFilter, debouncedSearchInput, showPercent, numericMode])
+  }, [filteredClients, filteredTotals, totalClients, hasCurrentClients, hasColumnFilters, showPercent, numericMode])
 
   // Initialize and reconcile saved card order whenever cards change
   useEffect(() => {
@@ -647,10 +822,16 @@ export default function Client2Module() {
     return value > 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'
   }
 
-  // Pagination - use totalClients from API for accurate page count
-  // Sorting is now handled server-side, so use filteredClients directly
-  const totalPages = serverPages ?? Math.max(1, Math.ceil(totalClients / itemsPerPage))
-  const paginatedClients = filteredClients // API returns sorted and paginated data
+  // Only unfiltered queries use server pages. Sort all matches before slicing.
+  const totalPages = hasColumnFilters ? Math.max(1, Math.ceil(filteredClients.length / itemsPerPage))
+    : hasCurrentClients ? serverPages ?? Math.max(1, Math.ceil(totalClients / itemsPerPage)) : 1
+  const displayPage = Math.min(currentPage, totalPages)
+  const paginatedClients = hasColumnFilters
+    ? filteredClients.slice((displayPage - 1) * itemsPerPage, displayPage * itemsPerPage) : filteredClients
+
+  useEffect(() => {
+    if (hasCurrentClients && currentPage > totalPages) setCurrentPage(totalPages)
+  }, [hasCurrentClients, currentPage, totalPages])
 
   // Navigate to next page
   const goToNextPage = () => {
@@ -679,11 +860,12 @@ export default function Client2Module() {
       const payload = {
         page: 1,
         limit: 100000, // Large limit to get all records
-        percentage: showPercent
+        percentage: showPercent,
+        currency: currencyMode
       }
 
       // Add filters to payload
-      const apiFilters = []
+      const apiFilters = [...apiColumnFilters]
       if (filters.hasFloating) {
         apiFilters.push({ field: 'profit', operator: 'not_equal', value: '0' })
       }
@@ -700,7 +882,7 @@ export default function Client2Module() {
         payload.filters = apiFilters
       }
 
-      // Note: Search is handled client-side after fetching data
+      if (debouncedSearchInput.trim()) payload.search = debouncedSearchInput.trim()
 
       // Add group filter
       const activeGroupName = getActiveGroupFilter('client2')
@@ -785,11 +967,12 @@ export default function Client2Module() {
       const payload = {
         page: 1,
         limit: 100000, // Large limit to get all records
-        percentage: showPercent
+        percentage: showPercent,
+        currency: currencyMode
       }
 
       // Add filters to payload
-      const apiFilters = []
+      const apiFilters = [...apiColumnFilters]
       if (filters.hasFloating) {
         apiFilters.push({ field: 'profit', operator: 'not_equal', value: '0' })
       }
@@ -806,7 +989,7 @@ export default function Client2Module() {
         payload.filters = apiFilters
       }
 
-      // Note: Search is handled client-side after fetching data
+      if (debouncedSearchInput.trim()) payload.search = debouncedSearchInput.trim()
 
       // Add group filter
       const activeGroupName = getActiveGroupFilter('client2')
@@ -1020,9 +1203,29 @@ export default function Client2Module() {
   const gridTemplateColumns = useMemo(() => {
     return visibleColumnsList.map(col => col.width).join(' ')
   }, [visibleColumnsList])
+  const filterColumn = columnConfig.find(col => col.key === columnFilters.openColumn)
 
   return (
     <div className="app-viewport-panel w-full min-h-0 overflow-hidden bg-white flex flex-col lg:hidden">
+      {filterColumn && (
+        <ColumnFilterMenu
+          key={filterColumn.key}
+          label={filterColumn.label}
+          kind={getColumnFilterKind(filterColumn.key)}
+          value={columnFilters.filters[`${filterColumn.key}_custom`] || null}
+          sortDirection={sortColumn === filterColumn.key ? sortDirection : null}
+          anchorRef={() => columnFilterRefs.current[filterColumn.key]}
+          initialRect={columnFilters.openRect}
+          onSort={direction => {
+            setSortColumn(filterColumn.key)
+            setSortDirection(direction)
+            setCurrentPage(1)
+          }}
+          onApply={filter => applyColumnFilter(filterColumn.key, filter)}
+          onClear={() => clearColumnFilter(filterColumn.key)}
+          onClose={columnFilters.closeMenu}
+        />
+      )}
       {/* Header */}
       <div className="bg-transparent sticky top-0 z-30">
         <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-3">
@@ -1436,12 +1639,20 @@ export default function Client2Module() {
                       ...(isColPinned(col) ? { left: `${pinnedOffsets[col.key] || 0}px` } : {})
                     }}
                   >
-                    <span>{col.label}</span>
+                    <span className="min-w-0 truncate" title={col.label}>{col.label}</span>
                     {sortColumn === col.key && (
                       <svg className={`w-3 h-3 transition-transform ${sortDirection === 'desc' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                       </svg>
                     )}
+                    <ColumnFilterTrigger
+                      columnKey={col.key}
+                      label={col.label}
+                      active={Boolean(columnFilters.filters[`${col.key}_custom`])}
+                      filterRef={node => { columnFilterRefs.current[col.key] = node }}
+                      onClick={columnFilters.openMenu}
+                      className="ml-auto"
+                    />
                   </div>
                 ))}
               </div>
@@ -1479,11 +1690,11 @@ export default function Client2Module() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                     </svg>
                     <p className="font-medium text-gray-700">
-                      {(filters.hasFloating || filters.hasCredit || filters.noDeposit || filters.hasPnl || getActiveGroupFilter('client2') || searchInput.trim())
+                      {(hasColumnFilters || filters.hasFloating || filters.hasCredit || filters.noDeposit || filters.hasPnl || getActiveGroupFilter('client2') || searchInput.trim())
                         ? 'No clients match the applied filters'
                         : 'No clients found'}
                     </p>
-                    {(filters.hasFloating || filters.hasCredit || filters.noDeposit || filters.hasPnl || getActiveGroupFilter('client2') || searchInput.trim()) && (
+                    {(hasColumnFilters || filters.hasFloating || filters.hasCredit || filters.noDeposit || filters.hasPnl || getActiveGroupFilter('client2') || searchInput.trim()) && (
                       <p className="text-sm text-gray-500 mt-1">Try adjusting your filters or search criteria</p>
                     )}
                   </div>
@@ -1527,6 +1738,8 @@ export default function Client2Module() {
                         rowData[col.key] = formatCellValue(col.key, client[col.key]);
                       } else if (col.key === 'tradingEnabled' || col.key === 'accountEnabled') {
                         rowData[col.key] = formatCellValue(col.key, client[col.key]);
+                      } else if (col.key === 'applied_percentage_is_custom') {
+                        rowData[col.key] = client[col.key] == null ? '-' : String(client[col.key]);
                       } else {
                         rowData[col.key] = client[col.key] || '-';
                       }

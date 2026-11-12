@@ -15,7 +15,89 @@ import ClientDetailsMobileModal from './ClientDetailsMobileModal'
 import ColumnChooserList from './ColumnChooserList'
 import { useGroups } from '../contexts/groupContextStore'
 import { applyCumulativeFilters } from '../utils/mobileFilters'
-import { formatTime as apiFormatTime } from '../utils/dateFormatter'
+import { formatTime as apiFormatTime, apiTimeSecond } from '../utils/dateFormatter'
+import ColumnFilterTrigger from './ColumnFilterTrigger'
+import ColumnFilterMenu from './ColumnFilterMenu'
+import useColumnFilters from '../hooks/useColumnFilters'
+import { columnFiltersForRequest, matchesColumnFilter, rowFieldValue, sortRowsByColumn } from '../utils/columnFilters'
+
+const orderFilterKind = key => key === 'timeSetup' ? 'date' : ['symbol', 'type', 'state'].includes(key) ? 'text' : 'number'
+const ORDER_RAW_ALIASES = {
+  order: ['ticket'], volume: ['volumeCurrent', 'volumeInitial'], priceOrder: ['price'],
+  priceTrigger: ['trigger', 'priceCurrent'], priceSL: ['sl'], priceTP: ['tp'],
+  timeSetup: ['timeUpdate', 'timeCreate', 'timeSetupStr', 'timeUpdateStr', 'timeCreateStr']
+}
+const orderTimeValue = row => row.timeSetup || row.timeUpdate || row.timeCreate || row.timeSetupStr || row.timeUpdateStr || row.timeCreateStr
+const orderRawValue = (row, key) => {
+  if (key === 'timeSetup') return apiTimeSecond(orderTimeValue(row))
+  // Volume is displayed from volumeCurrent, including a legitimate zero.
+  const raw = key === 'volume' ? rowFieldValue(row, 'volumeCurrent', ['volume', 'volumeInitial'])
+    : rowFieldValue(row, key, ORDER_RAW_ALIASES[key] || [])
+  return raw
+}
+const orderFilterModel = filters => Object.fromEntries(Object.entries(filters).map(([key, filter]) => [key, {
+  ...filter, type: filter.type === 'doesNotContain' ? 'notContains' : filter.type
+}]))
+const orderFilterRows = (rows, filters) => rows.filter(row => Object.entries(orderFilterModel(filters)).every(([key, filter]) => {
+  const column = key.replace(/_custom$/, '')
+  const value = orderRawValue(row, column)
+  if (column === 'timeSetup' && value === '') return false
+  const textEquality = orderFilterKind(column) === 'text' && ['equal', 'notEqual'].includes(filter.type)
+  return matchesColumnFilter(textEquality ? `text:${String(value).trim().toLowerCase()}` : value,
+    textEquality ? { ...filter, value1: `text:${String(filter.value1).trim().toLowerCase()}` } : filter)
+}))
+// Orders has a different text-operator vocabulary from deals. Keep bounds numeric/unformatted.
+const orderRequestFilters = filters => columnFiltersForRequest(orderFilterModel(filters)).map(filter => ({
+  ...filter, operator: filter.operator === 'contains' ? 'contain' : filter.operator === 'not_contains' ? 'does_not_contain' : filter.operator,
+  value: String(filter.value)
+}))
+const orderSortValue = (row, key) => orderFilterKind(key) === 'text' ? `text:${orderRawValue(row, key)}` : orderRawValue(row, key)
+
+// Column-filter results are not a server page: validate every row and collect the
+// entire candidate set before local filtering/sorting/pagination. Some servers
+// silently ignore filter operators (notably timeSetup's second precision).
+const fetchOrderResults = async (searchOrders, params, filters, signal, isCurrent) => {
+  const collectAll = Object.keys(filters).length > 0
+  // A local predicate cannot recover candidates eliminated by server Time
+  // conditions. Keep the group/search constraints, but evaluate Time locally.
+  const candidateParams = { ...params }
+  if (collectAll && params.filters) {
+    candidateParams.filters = params.filters.filter(filter => !['timeSetup', 'timeUpdate', 'timeCreate'].includes(filter.field))
+    if (!candidateParams.filters.length) delete candidateParams.filters
+  }
+  const rows = []
+  const seen = new Set()
+  let page = collectAll ? 1 : params.page
+  while (isCurrent() && !signal.aborted) {
+    const response = await searchOrders({ ...candidateParams, page }, { signal })
+    if (!isCurrent() || signal.aborted) return null
+    const data = response?.data?.orders ?? response?.data?.positions ?? response?.orders
+    if (!Array.isArray(data) || data.some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
+      throw new Error('Invalid pending orders response')
+    }
+    const rawTotal = response?.data?.total ?? response?.total
+    const total = rawTotal == null ? null : Number(rawTotal)
+    const validTotal = Number.isFinite(total) && total >= 0 ? total : null
+    const totals = response?.data?.totals ?? response?.totals ?? null
+    if (!collectAll) return { rows: data, total: validTotal ?? data.length, totals }
+    let added = 0
+    for (const row of data) {
+      const id = rowFieldValue(row, 'order', ['ticket', 'id'])
+      const key = id === '' ? JSON.stringify(row) : String(id)
+      if (!seen.has(key)) { seen.add(key); rows.push(row); added++ }
+    }
+    // Fail closed rather than publish an incomplete result or loop forever if
+    // an endpoint ignores page as well as filters.
+    if (data.length && !added) throw new Error('Pending orders pagination did not advance')
+    if (!data.length && validTotal > rows.length) throw new Error('Pending orders response is incomplete')
+    // Unknown totals require an empty page: a short page may be a server cap.
+    if (!data.length || (validTotal > 0 && rows.length >= validTotal)) {
+      return { rows: orderFilterRows(rows, filters), total: null, totals: null }
+    }
+    page++
+  }
+  return null
+}
 
 const formatNum = (n, decimals = 2) => {
   const v = Number(n || 0)
@@ -73,6 +155,8 @@ export default function PendingOrdersModule() {
   const itemsPerPage = 15
   const [sortColumn, setSortColumn] = useState(null)
   const [sortDirection, setSortDirection] = useState('asc')
+  const columnFilters = useColumnFilters()
+  const filterRefs = useRef({})
 
   // Server totals from API (for face cards — same approach as desktop)
   const [serverTotals, setServerTotals] = useState({ totalOrders: 0, uniqueLogins: 0, volumeCurrent: 0, volumeInitial: 0 })
@@ -80,6 +164,13 @@ export default function PendingOrdersModule() {
   const [serverOrders, setServerOrders] = useState([])
   const [serverTotalOrders, setServerTotalOrders] = useState(0)
   const [hasFetchedOrders, setHasFetchedOrders] = useState(false)
+  const [serverResultKey, setServerResultKey] = useState(null)
+  const hasColumnFilters = Object.keys(columnFilters.filters).length > 0
+  // A changed query must never render the previous unfiltered server page,
+  // including the render before the polling effect has a chance to run.
+  const orderResultKey = JSON.stringify([columnFilters.filters, searchInput, filters,
+    activeGroupFilters, groups, sortColumn, sortDirection, hasColumnFilters ? null : currentPage])
+  const hasCurrentServerOrders = hasFetchedOrders && serverResultKey === orderResultKey
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const initialLoadDoneRef = useRef(false)
   const minTimerDoneRef = useRef(false)
@@ -223,24 +314,26 @@ export default function PendingOrdersModule() {
           sortOrder: sortDirection || 'desc'
         }
         if (searchInput && searchInput.trim()) params.search = searchInput.trim()
+        const apiFilters = orderRequestFilters(columnFilters.filters)
 
         // Apply active group filter as a server-side login filter (works across pages)
         const activeGroupName = getActiveGroupFilter('pendingorders')
         if (activeGroupName) {
           const groupLogins = getGroupLogins(activeGroupName).map(l => Number(l)).filter(n => !Number.isNaN(n))
-          params.filters = [
-            { field: 'login', operator: 'in', value: groupLogins.length > 0 ? groupLogins : [-1] }
-          ]
+          apiFilters.push({ field: 'login', operator: 'in', value: groupLogins.length > 0 ? groupLogins : [-1] })
         }
+        if (apiFilters.length) params.filters = apiFilters
 
-        const response = await brokerAPI.searchOrders(params, { signal: controller.signal })
-        if (isCancelled || !isCurrent()) return
-        const data = response?.data?.orders || response?.data?.positions || response?.orders || []
-        const total = response?.data?.total || response?.total || 0
-        const totals = response?.data?.totals || response?.totals || null
+        const result = await fetchOrderResults(
+          (query, options) => brokerAPI.searchOrders(query, options), params,
+          columnFilters.filters, controller.signal, () => !isCancelled && isCurrent()
+        )
+        if (!result || isCancelled || !isCurrent()) return
+        const { rows: data, total, totals } = result
         if (Array.isArray(data)) {
           setServerOrders(data)
-          setServerTotalOrders(total)
+          setServerTotalOrders(total ?? data.length)
+          setServerResultKey(orderResultKey)
           if (totals) {
             setServerTotals({
               totalOrders: total,
@@ -259,6 +352,9 @@ export default function PendingOrdersModule() {
       } catch (err) {
         if ((!isCancelled && isCurrent()) && err?.code !== 'ERR_CANCELED' && err?.message !== 'canceled') {
           console.warn('[PendingOrdersModule] Polling error:', err?.message)
+          // Allow the filtered WS cache to render when the API is unavailable.
+          initialLoadDoneRef.current = true
+          if (minTimerDoneRef.current) setIsInitialLoading(false)
         }
       }
       if (!isCancelled && isCurrent()) timer = setTimeout(poll, 2000)
@@ -277,7 +373,7 @@ export default function PendingOrdersModule() {
       if (timer) { clearTimeout(timer); timer = null }
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [currentPage, itemsPerPage, sortColumn, sortDirection, searchInput, activeGroupFilters, getActiveGroupFilter, getGroupLogins])
+  }, [currentPage, itemsPerPage, sortColumn, sortDirection, searchInput, activeGroupFilters, getActiveGroupFilter, getGroupLogins, groups, columnFilters.filters, orderResultKey])
 
   const handlePageChange = (nextPage, maxPage) => {
     const safeMaxPage = Math.max(1, maxPage)
@@ -305,13 +401,13 @@ export default function PendingOrdersModule() {
 
   // Apply cumulative filters: Customize View -> IB -> Group
   const ibFilteredOrders = useMemo(() => {
-    return applyCumulativeFilters(orders, {
+    return orderFilterRows(applyCumulativeFilters(hasColumnFilters && hasCurrentServerOrders ? serverOrders : orders, {
       customizeFilters: filters,
       filterByActiveGroup,
       loginField: 'login',
       moduleName: 'pendingorders'
-    })
-  }, [orders, filters, filterByActiveGroup, activeGroupFilters])
+    }), columnFilters.filters)
+  }, [orders, filters, filterByActiveGroup, activeGroupFilters, columnFilters.filters, hasColumnFilters, hasCurrentServerOrders, serverOrders])
 
   // Calculate summary statistics
   const summaryStats = useMemo(() => {
@@ -334,7 +430,7 @@ export default function PendingOrdersModule() {
 
   // Filter orders based on search
   const filteredOrders = useMemo(() => {
-    let filtered = ibFilteredOrders.filter(order => {
+    const filtered = ibFilteredOrders.filter(order => {
       if (!searchInput.trim()) return true
       const query = searchInput.toLowerCase()
       return (
@@ -344,69 +440,8 @@ export default function PendingOrdersModule() {
       )
     })
 
-    // Apply sorting
-    if (sortColumn) {
-      // Map column keys to actual data fields for sorting
-      const columnKeyMapping = {
-        'volume': 'volumeCurrent',
-        'priceOrder': 'priceOrder',
-        'priceTrigger': 'priceTrigger',
-        'priceSL': 'priceSL',
-        'priceTP': 'priceTP',
-        'timeSetup': 'timeSetup'
-      }
-
-      const sortKey = columnKeyMapping[sortColumn] || sortColumn
-
-      filtered.sort((a, b) => {
-        // Get values with fallbacks for certain fields
-        let aVal, bVal
-
-        if (sortColumn === 'volume') {
-          aVal = a.volumeCurrent || a.volume
-          bVal = b.volumeCurrent || b.volume
-        } else if (sortColumn === 'priceOrder') {
-          aVal = a.priceOrder || a.price
-          bVal = b.priceOrder || b.price
-        } else if (sortColumn === 'priceTrigger') {
-          aVal = a.priceTrigger || a.trigger
-          bVal = b.priceTrigger || b.trigger
-        } else if (sortColumn === 'priceSL') {
-          aVal = a.priceSL || a.sl
-          bVal = b.priceSL || b.sl
-        } else if (sortColumn === 'priceTP') {
-          aVal = a.priceTP || a.tp
-          bVal = b.priceTP || b.tp
-        } else if (sortColumn === 'timeSetup') {
-          aVal = a.timeSetup || a.timeUpdate || a.timeCreate
-          bVal = b.timeSetup || b.timeUpdate || b.timeCreate
-        } else {
-          aVal = a[sortKey]
-          bVal = b[sortKey]
-        }
-
-        if (aVal == null && bVal == null) return 0
-        if (aVal == null) return 1
-        if (bVal == null) return -1
-
-        const aNum = Number(aVal)
-        const bNum = Number(bVal)
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-          return sortDirection === 'asc' ? aNum - bNum : bNum - aNum
-        }
-
-        const aStr = String(aVal).toLowerCase()
-        const bStr = String(bVal).toLowerCase()
-        if (sortDirection === 'asc') {
-          return aStr.localeCompare(bStr)
-        } else {
-          return bStr.localeCompare(aStr)
-        }
-      })
-    }
-
-    return filtered
-  }, [ibFilteredOrders, searchInput, sortColumn, sortDirection])
+    return sortRowsByColumn(filtered, orderSortValue, sortColumn || (hasColumnFilters ? 'timeSetup' : null), sortDirection)
+  }, [ibFilteredOrders, searchInput, sortColumn, sortDirection, hasColumnFilters])
 
   const handleSort = (columnKey) => {
     if (sortColumn === columnKey) {
@@ -420,11 +455,13 @@ export default function PendingOrdersModule() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [ibFilteredOrders.length, searchInput])
+  }, [ibFilteredOrders.length, searchInput, columnFilters.filters])
 
-  // Use server-polled orders for table when available (same as desktop), fallback to WS cache
-  const displayOrders = hasFetchedOrders ? serverOrders : filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-  const totalPages = hasFetchedOrders
+  // Only unfiltered queries use server pagination. Active filters paginate the
+  // locally validated matches across ALL API pages, never just the current page.
+  const useServerPage = hasCurrentServerOrders && !hasColumnFilters
+  const displayOrders = useServerPage ? serverOrders : filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+  const totalPages = useServerPage
     ? Math.max(1, Math.ceil(serverTotalOrders / itemsPerPage))
     : Math.max(1, Math.ceil(filteredOrders.length / itemsPerPage))
 
@@ -446,10 +483,11 @@ export default function PendingOrdersModule() {
   // Update cards when summary stats change
   useEffect(() => {
     // Prefer server totals (API) when available, fall back to client-side sums
-    const totalOrders = hasFetchedServerTotalsRef.current ? serverTotals.totalOrders : summaryStats.totalOrders
-    const uniqueLogins = hasFetchedServerTotalsRef.current ? serverTotals.uniqueLogins : summaryStats.uniqueLogins
-    const volumeCurrent = hasFetchedServerTotalsRef.current ? serverTotals.volumeCurrent : summaryStats.volumeCurrent
-    const volumeInitial = hasFetchedServerTotalsRef.current ? serverTotals.volumeInitial : summaryStats.volumeInitial
+    const useServerTotals = hasFetchedServerTotalsRef.current && !hasColumnFilters && hasCurrentServerOrders
+    const totalOrders = useServerTotals ? serverTotals.totalOrders : summaryStats.totalOrders
+    const uniqueLogins = useServerTotals ? serverTotals.uniqueLogins : summaryStats.uniqueLogins
+    const volumeCurrent = useServerTotals ? serverTotals.volumeCurrent : summaryStats.volumeCurrent
+    const volumeInitial = useServerTotals ? serverTotals.volumeInitial : summaryStats.volumeInitial
 
     const newCards = [
       { label: 'TOTAL ORDERS', value: fmtCount(totalOrders) },
@@ -470,7 +508,7 @@ export default function PendingOrdersModule() {
         })
       })
     }
-  }, [summaryStats, serverTotals, numericMode])
+  }, [summaryStats, serverTotals, numericMode, hasColumnFilters, hasCurrentServerOrders])
 
   // Get visible columns
   const allColumns = [
@@ -573,7 +611,7 @@ value = order.type || '-'
         )
 }
       case 'volume':
-        value = fmtMoney(order.volumeCurrent || order.volume || 0)
+        value = fmtMoney(orderRawValue(order, 'volume'))
         break
       case 'priceOrder':
         value = formatNum(order.priceOrder ?? order.price ?? 0, getOrderPriceDigits(order))
@@ -588,7 +626,7 @@ value = order.type || '-'
         value = formatNum(order.priceTP ?? order.tp ?? 0, getOrderPriceDigits(order))
         break
       case 'timeSetup':
-        value = formatTime(order.timeSetup || order.timeUpdate || order.timeCreate || order.timeSetupStr || order.timeUpdateStr || order.timeCreateStr)
+        value = formatTime(orderTimeValue(order))
         break
       case 'state':
         value = order.state || '-'
@@ -876,6 +914,10 @@ value = order.type || '-'
                           />
                         </svg>
                       )}
+                      <ColumnFilterTrigger columnKey={col.key} label={col.label}
+                        active={Boolean(columnFilters.filters[`${col.key}_custom`])}
+                        filterRef={node => { filterRefs.current[col.key] = node }}
+                        onClick={columnFilters.openMenu} />
                     </div>
                   ))}
                 </div>
@@ -951,6 +993,19 @@ value = order.type || '-'
 
       {/* Bottom Navigation */}
       <MobileBottomNav onMore={() => setIsSidebarOpen(true)} />
+
+      {columnFilters.openColumn && (
+        <ColumnFilterMenu key={columnFilters.openColumn}
+          label={allColumns.find(col => col.key === columnFilters.openColumn)?.label || columnFilters.openColumn}
+          kind={orderFilterKind(columnFilters.openColumn)}
+          value={columnFilters.filters[`${columnFilters.openColumn}_custom`]}
+          sortDirection={sortColumn === columnFilters.openColumn ? sortDirection : null}
+          anchorRef={() => filterRefs.current[columnFilters.openColumn]} initialRect={columnFilters.openRect}
+          onSort={direction => { setSortColumn(columnFilters.openColumn); setSortDirection(direction); setCurrentPage(1) }}
+          onApply={filter => { setCurrentPage(1); setHasFetchedOrders(false); columnFilters.setFilter(columnFilters.openColumn, filter) }}
+          onClear={() => { setCurrentPage(1); setHasFetchedOrders(false); columnFilters.clearFilter(columnFilters.openColumn) }}
+          onClose={columnFilters.closeMenu} />
+      )}
 
       {/* Column Selector Modal */}
       {isColumnSelectorOpen && (

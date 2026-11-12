@@ -16,12 +16,104 @@ import ClientDetailsMobileModal from './ClientDetailsMobileModal'
 import { useGroups } from '../contexts/groupContextStore'
 import { applyCumulativeFilters, applySearchFilter, applySorting } from '../utils/mobileFilters'
 import { normalizePositions } from '../utils/currencyNormalization'
-import { formatTime as apiFormatTime, serverNowEpoch } from '../utils/dateFormatter'
+import { formatTime as apiFormatTime, apiTimeSecond, serverNowEpoch } from '../utils/dateFormatter'
 import { brokerAPI } from '../services/api'
 import LoadingSpinner from './LoadingSpinner'
 import ExchangeNetPositions from './ExchangeNetPositions'
 import NetTypeChip from './NetTypeChip'
 import { exportStyledExcel, styledColumnsFromHeaders, sumColumns } from '../utils/exportStyledExcel'
+import ColumnFilterTrigger from './ColumnFilterTrigger'
+import ColumnFilterMenu from './ColumnFilterMenu'
+import useColumnFilters from '../hooks/useColumnFilters'
+import { columnFiltersForRequest, matchesColumnFilter } from '../utils/columnFilters'
+
+const POSITION_TEXT_COLUMNS = new Set(['symbol', 'action', 'netType', 'firstName', 'middleName', 'lastName', 'email', 'phone', 'reason', 'comment'])
+const POSITION_FIELD_ALIASES = { updated: 'timeUpdate', netType: 'action', netVolume: 'volume', totalProfit: 'profit' }
+const positionFilterKind = key => key === 'updated' ? 'date' : POSITION_TEXT_COLUMNS.has(key) ? 'text' : 'number'
+const positionFilterModel = filters => Object.fromEntries(Object.entries(filters).map(([key, filter]) => [key, {
+  ...filter, type: filter.type === 'doesNotContain' ? 'notContains' : filter.type
+}]))
+const positionFilterRows = (rows, filters, getValue) => {
+  const entries = Object.entries(positionFilterModel(filters))
+  return entries.length ? rows.filter(row => entries.every(([key, filter]) => {
+    if (!filter) return true
+    const columnKey = key.replace(/_custom$/, '')
+    const value = getValue(row, columnKey)
+    // Missing dates must not coerce to zero (or match a Not Equal condition).
+    if (columnKey === 'updated' && (value == null || value === '' || !Number.isFinite(Number(value)))) return false
+    return matchesColumnFilter(value, filter)
+  })) : rows
+}
+const positionActionLabel = value => {
+  const action = String(value ?? '').toUpperCase()
+  return action === '0' || action === 'BUY' ? 'Buy' : action === '1' || action === 'SELL' ? 'Sell' : 'Flat'
+}
+// One selection/formatting path for the cell, predicate and export. The API
+// formatter reads wall-clock fields, including DMY strings and offset suffixes,
+// without timezone conversion. Date.parse would interpret those differently.
+const positionTimeValue = row => row.timeUpdate || row.timeCreate || row.timeUpdateStr || row.timeCreateStr
+const positionTimeDisplay = row => apiFormatTime(positionTimeValue(row), '-')
+const positionTimeEpoch = row => apiTimeSecond(positionTimeValue(row))
+const positionRawValue = (row, key) => {
+  if (key === 'action' || key === 'netType') return positionActionLabel(row.action ?? row.type)
+  if (key === 'updated') return positionTimeEpoch(row)
+  if (key === 'sl' || key === 'tp') return row[key] ?? row[key === 'sl' ? 'priceSL' : 'priceTP'] ?? 0
+  if (['profit', 'totalProfit', 'storage', 'commission'].includes(key)) {
+    const value = Number(row[key === 'totalProfit' ? 'profit' : key] ?? 0)
+    return /^[A-Z]{6}c$/.test(String(row.symbol || '')) ? value / 100 : value
+  }
+  return row[POSITION_FIELD_ALIASES[key] || key] ?? (positionFilterKind(key) === 'number' ? 0 : '')
+}
+// Match the positions endpoint's operator vocabulary; keep numeric/date values unformatted.
+const positionRequestFilters = filters => columnFiltersForRequest(positionFilterModel(filters), null, POSITION_FIELD_ALIASES).map(filter => ({
+  ...filter,
+  operator: filter.operator === 'contains' ? 'contain' : filter.operator === 'not_contains' ? 'does_not_contain' : filter.operator,
+  value: String(filter.value)
+}))
+
+// A filtered result is a complete candidate collection, not a server page:
+// some endpoint versions accept conditions but silently ignore them.
+const fetchPositionResults = async (searchPositions, params, filters, signal, isCurrent) => {
+  const collectAll = Object.keys(filters).length > 0
+  // Time is evaluated against the rendered wall clock, not the endpoint's
+  // possibly unsupported field/operator, timezone or subsecond semantics.
+  // Retain base period/search/group constraints on every candidate page.
+  const candidateParams = { ...params }
+  if (collectAll && params.filters) {
+    candidateParams.filters = params.filters.filter(filter => !['timeUpdate', 'timeCreate', 'updated'].includes(filter.field))
+    if (!candidateParams.filters.length) delete candidateParams.filters
+  }
+  const rows = []
+  const seen = new Set()
+  let page = collectAll ? 1 : params.page
+  while (isCurrent() && !signal.aborted) {
+    const response = await searchPositions({ ...candidateParams, page }, { signal })
+    if (!isCurrent() || signal.aborted) return null
+    const data = response?.data?.positions ?? response?.positions
+    if (!Array.isArray(data) || data.some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
+      throw new Error('Invalid positions response')
+    }
+    const rawTotal = response?.data?.total ?? response?.total
+    const total = rawTotal == null ? null : Number(rawTotal)
+    const validTotal = Number.isFinite(total) && total >= 0 ? total : null
+    const totals = response?.data?.totals ?? response?.totals ?? null
+    if (!collectAll) return { rows: data, total: validTotal ?? data.length, totals }
+    let added = 0
+    for (const row of data) {
+      const id = row.position ?? row.ticket ?? row.id
+      const key = id == null || id === '' ? JSON.stringify(row) : String(id)
+      if (!seen.has(key)) { seen.add(key); rows.push(row); added++ }
+    }
+    if (data.length && !added) throw new Error('Positions pagination did not advance')
+    if (!data.length && validTotal > rows.length) throw new Error('Positions response is incomplete')
+    // Unknown totals require an empty page: a short page may be a server cap.
+    if (!data.length || (validTotal > 0 && rows.length >= validTotal)) {
+      return { rows: positionFilterRows(rows, filters, positionRawValue), total: null, totals: null }
+    }
+    page++
+  }
+  return null
+}
 
 const formatNum = (n) => {
   const v = Number(n || 0)
@@ -104,6 +196,18 @@ export default function PositionModule() {
   const clientNetItemsPerPage = 15
   const [clientNetSortColumn, setClientNetSortColumn] = useState(null)
   const [clientNetSortDirection, setClientNetSortDirection] = useState('asc')
+  const positionColumns = useColumnFilters()
+  const netColumns = useColumnFilters()
+  const { sortRows: sortPositionRows } = positionColumns
+  const positionFilterRefs = useRef({})
+  const netFilterRefs = useRef({})
+  const regularRequestFilters = useMemo(() => positionRequestFilters(positionColumns.filters), [positionColumns.filters])
+  // Aggregate fields cannot safely be assumed to support post-aggregation API filters.
+  // With NET conditions active, load EVERY server page and filter before local pagination.
+  const hasNetColumnFilters = Object.keys(netColumns.filters).length > 0
+
+  useEffect(() => { setCurrentPage(1) }, [positionColumns.filters, debouncedSearch])
+  useEffect(() => { setClientNetCurrentPage(1) }, [netColumns.filters])
 
   const [, setClientNetCardFilterOpen] = useState(false)
   const clientNetCardFilterRef = useRef(null)
@@ -141,6 +245,8 @@ export default function PositionModule() {
   // Server-side NET positions (fetched when NET Position tab is active)
   const [serverNetPositions, setServerNetPositions] = useState([])
   const [serverNetTotal, setServerNetTotal] = useState(0)
+  const [serverNetIsComplete, setServerNetIsComplete] = useState(false)
+  const [netFilterError, setNetFilterError] = useState('')
   const [hasFetchedServerNet, setHasFetchedServerNet] = useState(false)
   const hasFetchedServerNetRef = useRef(false)
   const [isServerNetLoading, setIsServerNetLoading] = useState(false)
@@ -150,6 +256,14 @@ export default function PositionModule() {
   const [serverPositionsTotal, setServerPositionsTotal] = useState(0)
   const [serverPositionsTotals, setServerPositionsTotals] = useState({ profit: 0, volume: 0, uniqueLogins: 0, floatingCombined: 0, floatingINR: 0, floatingUSD: 0 })
   const [hasFetchedServerPositions, setHasFetchedServerPositions] = useState(false)
+  const [serverPositionsResultKey, setServerPositionsResultKey] = useState(null)
+  const hasRegularColumnFilters = Object.keys(positionColumns.filters).length > 0
+  // Exclude the local page for collected results; never reuse an old query's
+  // page or totals, even on the render before effect cleanup runs.
+  const regularResultKey = JSON.stringify([positionColumns.filters, debouncedSearch, filters,
+    activeGroupFilters, groups, sortColumn, sortDirection, displayMode, dateFilter,
+    showClientNet, showExchangeView, hasRegularColumnFilters ? null : currentPage])
+  const hasCurrentServerPositions = hasFetchedServerPositions && serverPositionsResultKey === regularResultKey
   const hasFetchedServerPositionsRef = useRef(false)
   const [, setIsServerPositionsLoading] = useState(false)
   const [isInitialLoading, setIsInitialLoading] = useState(true)
@@ -289,7 +403,9 @@ export default function PositionModule() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const mobileRegularSourcePositions = displayPositions
+  const mobileRegularSourcePositions = hasRegularColumnFilters
+    ? (hasCurrentServerPositions ? serverPositions : [])
+    : displayPositions
 
   // Apply filters in cumulative order: Customize View -> Group
   const ibFilteredPositions = useMemo(() => {
@@ -306,7 +422,9 @@ export default function PositionModule() {
 
   // Apply date filter to positions before calculating summary stats
   // Note: date filter is applied server-side via dateFrom/dateTo params in the polling effect
-  const dateFilteredPositions = deferredIbFilteredPositions
+  // Deferred rows can still belong to the previous query. Filtered results
+  // must synchronously fail closed rather than show those stale rows.
+  const dateFilteredPositions = hasRegularColumnFilters ? ibFilteredPositions : deferredIbFilteredPositions
 
   // Calculate summary statistics (use deferred value to prevent blocking navigation)
 
@@ -335,7 +453,7 @@ export default function PositionModule() {
         const params = {
           page: currentPage,
           limit: itemsPerPage,
-          sortBy: sortColumn || 'timeCreate',
+          sortBy: POSITION_FIELD_ALIASES[sortColumn] || sortColumn || 'timeCreate',
           sortOrder: sortDirection || 'desc'
         }
         if (debouncedSearch && debouncedSearch.trim()) params.search = debouncedSearch.trim()
@@ -347,22 +465,24 @@ export default function PositionModule() {
         }
 
         // Apply active group filter as a server-side login filter (works across pages)
+        const apiFilters = [...regularRequestFilters]
         const activeGroupName = getActiveGroupFilter('positions')
         if (activeGroupName) {
           const groupLogins = getGroupLogins(activeGroupName).map(l => Number(l)).filter(n => !Number.isNaN(n))
-          params.filters = [
-            { field: 'login', operator: 'in', value: groupLogins.length > 0 ? groupLogins : [-1] }
-          ]
+          apiFilters.push({ field: 'login', operator: 'in', value: groupLogins.length > 0 ? groupLogins : [-1] })
         }
+        if (apiFilters.length) params.filters = apiFilters
 
-        const response = await brokerAPI.searchPositions(params, { signal: controller.signal })
-        if (isCancelled || !isCurrent()) return
-        const data = response?.data?.positions || response?.positions || []
-        const total = response?.data?.total || response?.total || 0
-        const totals = response?.data?.totals || response?.totals || null
+        const result = await fetchPositionResults(
+          (query, options) => brokerAPI.searchPositions(query, options), params,
+          positionColumns.filters, controller.signal, () => !isCancelled && isCurrent()
+        )
+        if (!result || isCancelled || !isCurrent()) return
+        const { rows: data, total, totals } = result
         if (Array.isArray(data)) {
           setServerPositions(data)
-          setServerPositionsTotal(total)
+          setServerPositionsTotal(total ?? data.length)
+          setServerPositionsResultKey(regularResultKey)
           if (totals) setServerPositionsTotals({
             profit: totals.profit ?? totals.totalProfit ?? 0,
             volume: totals.volume ?? totals.netVolume ?? 0,
@@ -382,6 +502,10 @@ export default function PositionModule() {
       } catch (err) {
         if ((!isCancelled && isCurrent()) && err?.code !== 'ERR_CANCELED' && err?.message !== 'canceled') {
           console.warn('[PositionModule] Regular poll error:', err?.message)
+          setServerPositionsResultKey(null)
+          setIsServerPositionsLoading(false)
+          initialLoadDoneRef.current = true
+          if (minTimerDoneRef.current) setIsInitialLoading(false)
         }
       }
       if (!isCancelled && isCurrent()) timer = setTimeout(poll, 2000)
@@ -400,7 +524,7 @@ export default function PositionModule() {
       if (timer) { clearTimeout(timer); timer = null }
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [showClientNet, showExchangeView, currentPage, itemsPerPage, sortColumn, sortDirection, debouncedSearch, displayMode, dateFilter, activeGroupFilters, getActiveGroupFilter, getGroupLogins])
+  }, [showClientNet, showExchangeView, currentPage, itemsPerPage, sortColumn, sortDirection, debouncedSearch, displayMode, dateFilter, activeGroupFilters, getActiveGroupFilter, getGroupLogins, regularRequestFilters, positionColumns.filters, regularResultKey])
 
   const normalizeNetTypeLabel = (action) => {
     if (action === 'BUY') return 'Buy'
@@ -433,6 +557,8 @@ export default function PositionModule() {
   useEffect(() => {
     if (!showClientNet) return
 
+    setIsServerNetLoading(true)
+    setNetFilterError('')
     let timer = null
     let isCancelled = false
     let controller = new AbortController()
@@ -446,8 +572,8 @@ export default function PositionModule() {
       try {
         if (!hasFetchedServerNetRef.current) setIsServerNetLoading(true)
         const params = {
-          page: clientNetCurrentPage,
-          limit: clientNetItemsPerPage,
+          page: hasNetColumnFilters ? 1 : clientNetCurrentPage,
+          limit: hasNetColumnFilters ? 1000 : clientNetItemsPerPage,
           netPosition: true,
           sortBy: clientNetSortColumn || 'netVolume',
           sortOrder: clientNetSortDirection || 'desc'
@@ -467,9 +593,21 @@ export default function PositionModule() {
 
         const response = await brokerAPI.searchPositions(params, { signal: controller.signal })
         if (isCancelled || !isCurrent()) return
-        const data = response?.data?.positions || response?.positions || []
+        let data = response?.data?.positions || response?.positions || []
         const total = response?.data?.total || response?.total || 0
         const totals = response?.data?.totals || response?.totals || null
+        if (hasNetColumnFilters && Array.isArray(data)) {
+          const firstCount = data.length
+          if (total > firstCount && !firstCount) throw new Error('NET response is incomplete')
+          // Use the actual returned page size in case the service caps the requested limit.
+          const pageCount = firstCount ? Math.ceil(total / firstCount) : 1
+          for (let page = 2; page <= pageCount; page += 1) {
+            const next = await brokerAPI.searchPositions({ ...params, page, limit: firstCount }, { signal: controller.signal })
+            if (isCancelled || !isCurrent()) return
+            data = data.concat(next?.data?.positions || next?.positions || [])
+          }
+          if (data.length < total) throw new Error('NET response is incomplete')
+        }
         if (Array.isArray(data)) {
           const mapped = data.map(item => ({
             symbol: item.symbol || item.baseSymbol || '-',
@@ -484,6 +622,7 @@ export default function PositionModule() {
             totalPositions: item.positionCount || item.totalPositions || 0
           }))
           setServerNetPositions(mapped)
+          setServerNetIsComplete(hasNetColumnFilters)
           setServerNetTotal(total)
           if (totals) setServerPositionsTotals({
             profit: totals.totalProfit ?? totals.profit ?? 0,
@@ -492,11 +631,14 @@ export default function PositionModule() {
           })
           setHasFetchedServerNet(true)
           hasFetchedServerNetRef.current = true
+          setNetFilterError('')
           setIsServerNetLoading(false)
         }
       } catch (err) {
         if ((!isCancelled && isCurrent()) && err?.code !== 'ERR_CANCELED' && err?.message !== 'canceled') {
           console.warn('[PositionModule] NET poll error:', err?.message)
+          setNetFilterError('Unable to load NET positions. Retrying…')
+          setIsServerNetLoading(false)
         }
       }
       if (!isCancelled && isCurrent()) timer = setTimeout(poll, 2000)
@@ -515,15 +657,15 @@ export default function PositionModule() {
       if (timer) { clearTimeout(timer); timer = null }
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [showClientNet, groupByBaseSymbol, displayMode, clientNetSearchInput, clientNetCurrentPage, clientNetItemsPerPage, clientNetSortColumn, clientNetSortDirection, activeGroupFilters, getActiveGroupFilter, getGroupLogins])
+  }, [showClientNet, groupByBaseSymbol, displayMode, clientNetSearchInput, clientNetCurrentPage, clientNetItemsPerPage, clientNetSortColumn, clientNetSortDirection, activeGroupFilters, getActiveGroupFilter, getGroupLogins, hasNetColumnFilters, netColumns.filters])
 
   // Mobile NET tab mirrors desktop NET Position: symbol-aggregated rows from server.
   // Until the first server response arrives, show empty (skeleton handles the loading UI).
-  const mobileNetSourcePositions = hasFetchedServerNet ? serverNetPositions : []
-
   // Filter NET positions based on search
   const filteredClientNetPositions = useMemo(() => {
-    let filtered = mobileNetSourcePositions
+    // Never run aggregate conditions over an old, single-page NET response.
+    const mobileNetSourcePositions = hasFetchedServerNet && serverNetIsComplete === hasNetColumnFilters ? serverNetPositions : []
+    let filtered = positionFilterRows(mobileNetSourcePositions, netColumns.filters, (row, key) => row[key])
     if (clientNetSearchInput.trim()) {
       const query = clientNetSearchInput.toLowerCase()
       filtered = filtered.filter(pos =>
@@ -534,28 +676,19 @@ export default function PositionModule() {
     // Apply sorting
     filtered = applySorting(filtered, clientNetSortColumn, clientNetSortDirection)
     return filtered
-  }, [mobileNetSourcePositions, clientNetSearchInput, clientNetSortColumn, clientNetSortDirection])
+  }, [hasFetchedServerNet, serverNetIsComplete, hasNetColumnFilters, serverNetPositions, clientNetSearchInput, clientNetSortColumn, clientNetSortDirection, netColumns.filters])
 
   // Apply search and sorting (use deferred value to prevent blocking navigation)
   const filteredPositions = useMemo(() => {
     // Apply search filter (date filter already applied in dateFilteredPositions)
     let filtered = applySearchFilter(dateFilteredPositions, debouncedSearch, ['symbol', 'login'])
-
-    // Map column keys to actual data fields for sorting
-    const columnKeyMapping = {
-      'updated': 'timeUpdate',
-      'netType': 'type',
-      'action': 'type',
-      'netVolume': 'volume',
-      'totalProfit': 'profit'
-    }
-    const sortKey = columnKeyMapping[sortColumn] || sortColumn
+    filtered = positionFilterRows(filtered, positionColumns.filters, positionRawValue)
 
     // Apply sorting
-    filtered = applySorting(filtered, sortKey, sortDirection)
+    filtered = sortPositionRows(filtered, positionRawValue, sortColumn || (hasRegularColumnFilters ? 'updated' : null), sortDirection)
 
     return filtered
-  }, [dateFilteredPositions, debouncedSearch, sortColumn, sortDirection])
+  }, [dateFilteredPositions, debouncedSearch, sortColumn, sortDirection, positionColumns.filters, sortPositionRows, hasRegularColumnFilters])
 
   // Handle column sorting
   const handleSort = (columnKey) => {
@@ -582,24 +715,33 @@ export default function PositionModule() {
   // Calculate totals (memoized to prevent recalculation)
 
 
-  // Mobile now uses server-polled data (same as desktop). isMobileRegularServerMode = true once first poll done.
-  const isMobileRegularServerMode = hasFetchedServerPositions
+  // Only unfiltered queries display an already-paged server result directly.
+  const isMobileRegularServerMode = hasCurrentServerPositions && !hasRegularColumnFilters
+  // Last render boundary: neither an obsolete collection nor a mismatching row
+  // may leak through, even if an upstream memo/candidate collection is stale.
+  // Count and slice this SAME validated list, never the unfiltered server total.
+  const validatedRegularPositions = hasRegularColumnFilters && !hasCurrentServerPositions
+    ? []
+    : positionFilterRows(isMobileRegularServerMode ? serverPositions : filteredPositions, positionColumns.filters, positionRawValue)
   const mobileRegularTotalPages = isMobileRegularServerMode
     ? Math.max(1, Math.ceil(serverPositionsTotal / itemsPerPage))
-    : Math.max(1, Math.ceil(filteredPositions.length / itemsPerPage))
-  // When server mode active, serverPositions are already paged — display directly
+    : Math.max(1, Math.ceil(validatedRegularPositions.length / itemsPerPage))
+  const mobileRegularPage = isMobileRegularServerMode ? currentPage : Math.min(Math.max(1, currentPage), mobileRegularTotalPages)
+  // Server pages are already sliced; collected results are paginated locally.
   const mobileRegularDisplayedPositions = isMobileRegularServerMode
-    ? serverPositions
-    : filteredPositions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+    ? validatedRegularPositions
+    : validatedRegularPositions.slice((mobileRegularPage - 1) * itemsPerPage, mobileRegularPage * itemsPerPage)
 
   // Pagination calculations for Client NET (server-side paginated)
   // Server returns one page of results at a time; total pages derived from serverNetTotal.
   const clientNetTotalPages = useMemo(() =>
-    Math.max(1, Math.ceil((serverNetTotal || 0) / clientNetItemsPerPage)),
-    [serverNetTotal, clientNetItemsPerPage]
+    Math.max(1, Math.ceil((hasNetColumnFilters ? filteredClientNetPositions.length : serverNetTotal || 0) / clientNetItemsPerPage)),
+    [serverNetTotal, clientNetItemsPerPage, hasNetColumnFilters, filteredClientNetPositions.length]
   )
   // Server already returns only the current page's rows — do not slice again on the client.
-  const clientNetPaginatedPositions = filteredClientNetPositions
+  const clientNetPaginatedPositions = hasNetColumnFilters
+    ? filteredClientNetPositions.slice((clientNetCurrentPage - 1) * clientNetItemsPerPage, clientNetCurrentPage * clientNetItemsPerPage)
+    : filteredClientNetPositions
 
   // Click outside handlers
   useEffect(() => {
@@ -681,15 +823,25 @@ export default function PositionModule() {
     return [...ordered.filter(col => col.key === 'symbol'), ...ordered.filter(col => col.key !== 'symbol')]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientNetColumnOrder])
-  const clientNetGridTemplate = clientNetOrderedColumns.filter(col => clientNetVisibleColumns[col.key]).map(col => col.width).join(' ')
+  const clientNetGridTemplate = clientNetOrderedColumns.filter(col => clientNetVisibleColumns[col.key])
+    .map(col => col.width.replace(/minmax\((\d+)px/, (_, width) => `minmax(${Math.max(112, Number(width) + 24)}px`)).join(' ')
   const clientNetOrderCss = clientNetOrderedColumns.map((col, index) => `[data-net-table] [data-col="${col.key}"]{order:${index}}`).join('')
+  const renderNetColumnFilter = key => (
+    <ColumnFilterTrigger
+      columnKey={key}
+      label={CLIENT_NET_COLUMNS.find(column => column.key === key)?.label || key}
+      active={Boolean(netColumns.filters[`${key}_custom`])}
+      filterRef={node => { netFilterRefs.current[key] = node }}
+      onClick={netColumns.openMenu}
+    />
+  )
 
   // Generate grid template columns for the table
   const gridTemplateColumns = useMemo(() => {
     // Widths scaled up 20% for the 12px table text
     return activeColumns.map(col => {
       const px = /^(\d+)px$/.exec(col.width || '')
-      return px ? `${Math.round(Number(px[1]) * 1.2)}px` : (col.width || '1fr')
+      return px ? `${Math.max(104, Math.round(Number(px[1]) * 1.2) + 24)}px` : (col.width || '1fr')
     }).join(' ')
   }, [activeColumns])
 
@@ -808,7 +960,7 @@ const handleLoginClick = () => {
 }
       case 'updated':
         {
-const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.timeUpdateStr || pos.timeCreateStr, '-')
+      const formattedTime = positionTimeDisplay(pos)
         return <div className={`h-[38px] flex items-center justify-start px-2 ${stickyClass}`} style={stickyStyle}>{formattedTime}</div>
 }
       case 'firstName':
@@ -841,7 +993,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
         uniqueLogins: serverPositionsTotals.uniqueLogins || loginSet.size
       }
     }
-    if (!showClientNet && hasFetchedServerPositions) {
+    if (!showClientNet && isMobileRegularServerMode) {
       return {
         total: serverPositionsTotal,
         netVolume: serverPositionsTotals.volume,
@@ -853,10 +1005,22 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
     return {
       total: filteredPositions.length,
       netVolume: filteredPositions.reduce((sum, p) => sum + (Number(p.volume) || 0), 0),
-      totalProfit: filteredPositions.reduce((sum, p) => sum + (Number(p.profit) || 0), 0),
+      totalProfit: filteredPositions.reduce((sum, p) => sum + (Number(positionRawValue(p, 'profit')) || 0), 0),
       uniqueLogins: new Set(filteredPositions.map(p => p.login)).size
     }
-  }, [showClientNet, hasFetchedServerNet, serverNetPositions, serverNetTotal, serverPositionsTotals, hasFetchedServerPositions, serverPositionsTotal, filteredPositions])
+  }, [showClientNet, hasFetchedServerNet, serverNetPositions, serverNetTotal, serverPositionsTotals, isMobileRegularServerMode, serverPositionsTotal, filteredPositions])
+
+  // Never reuse unfiltered API card totals for a locally validated collection.
+  const regularCardTotals = useMemo(() => {
+    if (isMobileRegularServerMode) return serverPositionsTotals
+    return filteredPositions.reduce((totals, row) => {
+      const profit = Number(positionRawValue(row, 'profit')) || 0
+      const currency = String(row.currency ?? clientCurrencyMap[row.login] ?? 'USD').toUpperCase()
+      totals.floatingCombined += profit
+      totals[currency === 'INR' ? 'floatingINR' : 'floatingUSD'] += profit
+      return totals
+    }, { floatingCombined: 0, floatingINR: 0, floatingUSD: 0 })
+  }, [isMobileRegularServerMode, serverPositionsTotals, filteredPositions, clientCurrencyMap])
 
 
 
@@ -891,8 +1055,6 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
     const EXPORT_LIMIT = 1000
     const CONCURRENCY = 5
 
-    const formatTime = (ts) => apiFormatTime(ts, '-')
-
     try {
       if (showClientNet) {
         // ── NET positions export (mirrors desktop handleExportNetPositions) ──
@@ -903,7 +1065,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
         }
         if (groupByBaseSymbol) baseParams.groupBaseSymbol = true
         if (displayMode === 'percentage') baseParams.percentage = true
-        if (debouncedSearch.trim()) baseParams.search = debouncedSearch.trim()
+        if (clientNetSearchInput.trim()) baseParams.search = clientNetSearchInput.trim()
         // Apply group filter
         const _netExportGroupName = getActiveGroupFilter('positions')
         if (_netExportGroupName) {
@@ -951,6 +1113,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
           })
         }
 
+        allRows = positionFilterRows(allRows, netColumns.filters, (row, key) => row[key])
         const pct = displayMode === 'percentage'
         const headers = [
           { key: 'symbol',         label: 'Symbol',                                     accessor: r => r.symbol },
@@ -977,8 +1140,9 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
       } else {
         // ── Regular positions export (mirrors desktop handleExportPositions) ──
         const baseParams = {
-          sortBy: sortColumn || 'timeCreate',
+          sortBy: POSITION_FIELD_ALIASES[sortColumn] || sortColumn || 'timeCreate',
           sortOrder: sortDirection || 'desc',
+          filters: [...regularRequestFilters],
         }
         if (debouncedSearch.trim()) baseParams.search = debouncedSearch.trim()
         if (displayMode === 'percentage') baseParams.percentage = true
@@ -987,7 +1151,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
         if (_regExportGroupName) {
           const _regExportGroupLogins = getGroupLogins(_regExportGroupName).map(l => Number(l)).filter(n => !Number.isNaN(n))
           const _regExportApiFilters = [{ field: 'login', operator: 'in', value: _regExportGroupLogins.length > 0 ? _regExportGroupLogins : [-1] }]
-          baseParams.filters = _regExportApiFilters
+          baseParams.filters.push(..._regExportApiFilters)
         }
         if (dateFilter) {
           const now = serverNowEpoch()
@@ -1019,7 +1183,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
         allPositions = filterByActiveGroup(allPositions, 'login', 'positions')
 
         const exportValue = (row, key) => {
-          if (key === 'updated') return formatTime(row.timeUpdate || row.timeCreate || row.timeUpdateStr || row.timeCreateStr)
+          if (key === 'updated') return positionTimeDisplay(row)
           if (key === 'action' || key === 'netType') return row.action ?? row.type
           if (key === 'netVolume') return row.volume ?? 0
           if (key === 'sl') return row.sl ?? row.priceSL ?? 0
@@ -1119,7 +1283,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
             userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'pan-x'
           }
           const icon = (name) => `${import.meta.env.BASE_URL || '/'}mobile-icons/${name}.svg`
-          const fc = showExchangeView ? exchangeCardTotals : serverPositionsTotals
+          const fc = showExchangeView ? exchangeCardTotals : regularCardTotals
           const mobileCards = [
             {
               label: 'Total Positions',
@@ -1309,8 +1473,8 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
               </svg>
             </button>
             <button 
-              onClick={() => handlePageChange(currentPage - 1, mobileRegularTotalPages)}
-              disabled={currentPage === 1}
+              onClick={() => handlePageChange(mobileRegularPage - 1, mobileRegularTotalPages)}
+              disabled={mobileRegularPage === 1}
               className="h-10 w-9 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
@@ -1322,7 +1486,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                 type="number"
                 min={1}
                 max={mobileRegularTotalPages}
-                value={currentPage}
+                value={mobileRegularPage}
                 onChange={(e) => {
                   const n = Number(e.target.value)
                   const maxPage = mobileRegularTotalPages
@@ -1337,8 +1501,8 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
               <span className="text-[#6B7280]">{mobileRegularTotalPages}</span>
             </div>
             <button 
-              onClick={() => handlePageChange(currentPage + 1, mobileRegularTotalPages)}
-              disabled={currentPage >= mobileRegularTotalPages}
+              onClick={() => handlePageChange(mobileRegularPage + 1, mobileRegularTotalPages)}
+              disabled={mobileRegularPage >= mobileRegularTotalPages}
               className="h-10 w-9 flex-shrink-0 rounded-xl bg-transparent border border-[#D5DEEA] flex items-center justify-center hover:bg-white/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
@@ -1390,7 +1554,14 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                           pointerEvents: 'auto'
                         }}
                       >
-                        <span>{col.label}</span>
+                        <span className="min-w-0 truncate">{col.label}</span>
+                        <ColumnFilterTrigger
+                          columnKey={col.key}
+                          label={col.label}
+                          active={Boolean(positionColumns.filters[`${col.key}_custom`])}
+                          filterRef={node => { positionFilterRefs.current[col.key] = node }}
+                          onClick={positionColumns.openMenu}
+                        />
                         {sortColumn === col.key && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path 
@@ -1439,9 +1610,9 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                       </div>
                     ))}
                   </>
-                ) : filteredPositions.length === 0 && !isInitialLoading ? (
+                ) : mobileRegularDisplayedPositions.length === 0 && !isInitialLoading ? (
                   <div className="text-center py-8 text-[#6B7280] text-sm">
-                    {(filters.hasFloating || filters.hasCredit || filters.noDeposit || getActiveGroupFilter('positions')) 
+                    {(filters.hasFloating || filters.hasCredit || filters.noDeposit || getActiveGroupFilter('positions') || Object.keys(positionColumns.filters).length)
                       ? 'No positions match the applied filters' 
                       : 'No positions found'}
                   </div>
@@ -1594,6 +1765,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto', boxShadow: '2px 0 4px rgba(0,0,0,0.08)' }}
                       >
                         Symbol
+                        {renderNetColumnFilter('symbol')}
                         {clientNetSortColumn === 'symbol' && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path d={clientNetSortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1608,6 +1780,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
                       >
                         Type
+                        {renderNetColumnFilter('netType')}
                         {clientNetSortColumn === 'netType' && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path d={clientNetSortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1622,6 +1795,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
                       >
                         NET Vol
+                        {renderNetColumnFilter('netVolume')}
                         {clientNetSortColumn === 'netVolume' && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path d={clientNetSortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1636,6 +1810,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
                       >
                         Avg Price
+                        {renderNetColumnFilter('avgPrice')}
                         {clientNetSortColumn === 'avgPrice' && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path d={clientNetSortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1650,6 +1825,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
                       >
                         Current Price
+                        {renderNetColumnFilter('currentPrice')}
                         {clientNetSortColumn === 'currentPrice' && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path d={clientNetSortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1664,6 +1840,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
                       >
                         Total Profit
+                        {renderNetColumnFilter('totalProfit')}
                         {clientNetSortColumn === 'totalProfit' && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path d={clientNetSortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1678,6 +1855,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
                       >
                         Swap
+                        {renderNetColumnFilter('totalStorage')}
                         {clientNetSortColumn === 'totalStorage' && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path d={clientNetSortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1692,6 +1870,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
                       >
                         Comm
+                        {renderNetColumnFilter('totalCommission')}
                         {clientNetSortColumn === 'totalCommission' && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path d={clientNetSortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1706,6 +1885,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
                       >
                         Logins
+                        {renderNetColumnFilter('loginCount')}
                         {clientNetSortColumn === 'loginCount' && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path d={clientNetSortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1720,6 +1900,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         style={{ userSelect: 'none', touchAction: 'manipulation', pointerEvents: 'auto' }}
                       >
                         Positions
+                        {renderNetColumnFilter('totalPositions')}
                         {clientNetSortColumn === 'totalPositions' && (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                             <path d={clientNetSortDirection === 'asc' ? 'M5 15l7-7 7 7' : 'M5 9l7 7 7-7'} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1730,7 +1911,7 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                   </div>
 
                   {/* Table Rows */}
-                  {(isServerNetLoading || isClientNetPageChanging) && filteredClientNetPositions.length === 0 ? (
+                  {isServerNetLoading || (isClientNetPageChanging && filteredClientNetPositions.length === 0) ? (
                     <>
                       {[1, 2, 3, 4, 5, 6].map((i) => (
                         <div data-mobile-data-row="body" key={`client-net-skeleton-${i}`} className="grid text-[12px] text-[#374151] tabular-nums bg-transparent border-b border-[#E1E1E1]" style={{
@@ -1750,6 +1931,8 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
                         </div>
                       ))}
                     </>
+                  ) : netFilterError ? (
+                    <div role="alert" className="text-center py-8 text-red-600 text-sm">{netFilterError}</div>
                   ) : clientNetPaginatedPositions.length === 0 ? (
                     <div className="text-center py-8 text-[#6B7280] text-sm">No NET positions found</div>
                   ) : (
@@ -1793,6 +1976,37 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
       {/* Bottom Navigation */}
       <MobileBottomNav onMore={() => setIsSidebarOpen(true)} />
 
+      {!showClientNet && !showExchangeView && positionColumns.openColumn && (
+        <ColumnFilterMenu
+          key={positionColumns.openColumn}
+          label={activeColumns.find(column => column.key === positionColumns.openColumn)?.label || positionColumns.openColumn}
+          kind={positionFilterKind(positionColumns.openColumn)}
+          value={positionColumns.filters[`${positionColumns.openColumn}_custom`]}
+          sortDirection={sortColumn === positionColumns.openColumn ? sortDirection : null}
+          anchorRef={() => positionFilterRefs.current[positionColumns.openColumn]}
+          initialRect={positionColumns.openRect}
+          onSort={direction => { setSortColumn(positionColumns.openColumn); setSortDirection(direction); setCurrentPage(1); positionColumns.closeMenu() }}
+          onClear={() => { positionColumns.clearFilter(positionColumns.openColumn); setCurrentPage(1) }}
+          onApply={filter => { positionColumns.setFilter(positionColumns.openColumn, filter); setCurrentPage(1) }}
+          onClose={positionColumns.closeMenu}
+        />
+      )}
+      {showClientNet && !showExchangeView && netColumns.openColumn && (
+        <ColumnFilterMenu
+          key={netColumns.openColumn}
+          label={CLIENT_NET_COLUMNS.find(column => column.key === netColumns.openColumn)?.label || netColumns.openColumn}
+          kind={positionFilterKind(netColumns.openColumn)}
+          value={netColumns.filters[`${netColumns.openColumn}_custom`]}
+          sortDirection={clientNetSortColumn === netColumns.openColumn ? clientNetSortDirection : null}
+          anchorRef={() => netFilterRefs.current[netColumns.openColumn]}
+          initialRect={netColumns.openRect}
+          onSort={direction => { setClientNetSortColumn(netColumns.openColumn); setClientNetSortDirection(direction); setClientNetCurrentPage(1); netColumns.closeMenu() }}
+          onClear={() => { netColumns.clearFilter(netColumns.openColumn); setClientNetCurrentPage(1) }}
+          onApply={filter => { netColumns.setFilter(netColumns.openColumn, filter); setClientNetCurrentPage(1) }}
+          onClose={netColumns.closeMenu}
+        />
+      )}
+
       {/* CustomizeView Modal */}
       <CustomizeViewModal
         isOpen={isCustomizeOpen}
@@ -1806,6 +2020,8 @@ const formattedTime = apiFormatTime(pos.timeUpdate || pos.timeCreate || pos.time
           setIsLoginGroupsOpen(true)
         }}
         onReset={() => {
+          positionColumns.clearAll()
+          netColumns.clearAll()
           setFilters({ hasFloating: false, hasCredit: false, noDeposit: false })
           setDateFilter(null)
           setActiveGroupFilter('positions', null)

@@ -11,6 +11,7 @@ export const COLUMN_FILTER_OPERATORS = {
   greaterThanOrEqual: 'greater_than_or_equal',
   contains: 'contains',
   notContains: 'not_contains',
+  doesNotContain: 'not_contains',
   startsWith: 'starts_with',
   endsWith: 'ends_with',
 }
@@ -96,7 +97,7 @@ export function matchesColumnFilter(value, filter) {
     : filter.type === 'notEqual' ? left !== right
     : filter.type === 'startsWith' ? left.startsWith(right)
     : filter.type === 'endsWith' ? left.endsWith(right)
-    : filter.type === 'notContains' ? !left.includes(right)
+    : ['notContains', 'doesNotContain'].includes(filter.type) ? !left.includes(right)
     : left.includes(right)
 }
 

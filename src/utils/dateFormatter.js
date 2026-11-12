@@ -107,6 +107,18 @@ const apiTimeParts = (value) => {
   return null
 }
 
+/** The displayed API wall-clock second, without Date.parse timezone conversion.
+ * Invalid/missing calendar values are not filterable, including for Not Equal.
+ */
+export const apiTimeSecond = (value) => {
+  const parts = apiTimeParts(value)
+  if (!parts) return ''
+  const values = [parts.year, parts.month, parts.day, parts.hours, parts.minutes, parts.seconds].map(Number)
+  const date = new Date(Date.UTC(values[0], values[1] - 1, ...values.slice(2)))
+  const actual = [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()]
+  return actual.every((part, index) => part === values[index]) ? date.getTime() / 1000 : ''
+}
+
 /**
  * Format an API time value as dd/mm/yyyy HH:mm:ss, showing exactly the time
  * the API returned (epoch seconds/ms or a date string).

@@ -23,7 +23,8 @@ test('column filter conditions evaluate numbers, text and ranges consistently', 
     filterRowsByColumnFilters(rows, filters, (item, key) => item[key]).map(row => row.login),
     [90002],
   )
-  assert.equal(matchesColumnFilters({ name: 'Broker' }, { name_custom: { type: 'doesNotContain', value1: 'bro' } }, (row, key) => row[key]), true)
+  assert.equal(matchesColumnFilters({ name: 'Broker' }, { name_custom: { type: 'doesNotContain', value1: 'bro' } }, (row, key) => row[key]), false)
+  assert.equal(matchesColumnFilters({ name: 'Broker' }, { name_custom: { type: 'doesNotContain', value1: 'demo' } }, (row, key) => row[key]), true)
   assert.equal(matchesColumnFilters({ name: 'Broker' }, { name_custom: { type: 'startsWith', value1: 'bro' } }, (row, key) => row[key]), true)
   assert.equal(matchesColumnFilters({ amount: '100' }, { amount_custom: { type: 'greaterThan', value1: 10 } }, (row, key) => row[key]), true)
 })

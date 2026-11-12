@@ -2,7 +2,7 @@ import BrokerCreditSummary from '../components/BrokerCreditSummary'
 import { withExportLoading } from '../utils/exportLoading'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { applyReportGroupFilter } from '../utils/reportGroupFilter'
-import { fetchAllRows, downloadCsv, EXPORT_CHUNK_SIZE } from '../utils/exportAllPages'
+import { downloadCsv, EXPORT_CHUNK_SIZE } from '../utils/exportAllPages'
 import useSearchAsYouType from '../hooks/useSearchAsYouType'
 import { createPortal } from 'react-dom'
 import ColumnChooserList from '../components/ColumnChooserList'
@@ -29,7 +29,8 @@ import { getPresetRange, QUICK_FILTERS } from '../utils/dealTimePresets'
 import { useAuth } from '../contexts/authContextStore'
 import { brokerAPI } from '../services/api'
 import { serverNowDate, serverEpochFromParts, formatTime } from '../utils/dateFormatter'
-import { buildCreditRequest, parseCreditReport } from '../utils/creditReport'
+import { buildCreditRequest } from '../utils/creditReport'
+import { creditTimeValue, filterCreditTime, fetchCreditCandidates } from '../utils/creditReportTime'
 
 const EMPTY_CLIENT_CACHE = []
 const ignoreCacheUpdate = () => {}
@@ -64,7 +65,7 @@ const mobileFrozenStyle = (tableColumns, key, header = false, frozenWidths = { l
   return undefined
 }
 const display = (row, key) => {
-  const value = field(row, key)
+  const value = key === 'time' ? creditTimeValue(row) : field(row, key)
   if (value == null || value === '') return '—'
   if (key === 'time') return formatTime(value, '—')
   if (key === 'amount') return Number.isFinite(Number(value)) ? Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(value)
@@ -157,9 +158,7 @@ export default function CreditReportPage() {
   }, [])
   useSearchAsYouType(searchInput, applied.search, applySearch, setPage)
   const [limit, setLimit] = useState(100)
-  const [result, setResult] = useState({ rows: [], total: null, pages: null })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [storedResult, setResult] = useState(null)
   const [validation, setValidation] = useState('')
   const [refresh, setRefresh] = useState(0)
   const update = (key, value) => setDraft(previous => ({ ...previous, [key]: value }))
@@ -176,48 +175,65 @@ export default function CreditReportPage() {
   const filterRefs = useRef({})
   const applyColumnFilter = (key, filter) => { applyColumnFilterRaw(key, filter); setPage(1) }
   const clearColumnFilter = key => { clearColumnFilterRaw(key); setPage(1) }
+  const timeFilter = columnFilters.time_custom
+  // Keep the period and every other condition; Time is a local wall-clock predicate.
+  const queryKey = JSON.stringify({ applied, page: timeFilter ? 1 : page,
+    limit: timeFilter ? EXPORT_CHUNK_SIZE : limit, refresh, isAuthenticated, groupKey,
+    columnRequestFilters: columnRequestFilters.filter(item => item.field !== 'time'), timeFilter })
+  const currentQueryRef = useRef(queryKey)
+  currentQueryRef.current = queryKey
+  const exportControllerRef = useRef(null)
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false; exportControllerRef.current?.abort() }
+  }, [])
+  useEffect(() => {
+    exportControllerRef.current?.abort()
+  }, [queryKey])
+  const currentResult = storedResult?.key === queryKey ? storedResult : null
+  const loading = isAuthenticated && !currentResult
+  const error = currentResult?.error || ''
+  const result = currentResult ? timeFilter ? { ...currentResult,
+    rows: currentResult.rows.slice((page - 1) * limit, page * limit),
+    pages: Math.max(1, Math.ceil(currentResult.total / limit)) } : currentResult
+    : { rows: [], total: null, pages: null }
   const toggleSidebar = () => setSidebarOpen(previous => {
     try { localStorage.setItem('sidebarOpen', JSON.stringify(!previous)) } catch { /* Storage may be unavailable. */ }
     return !previous
   })
 
   useEffect(() => {
-    if (!isAuthenticated) return
     if (previousGroup.current !== groupKey) {
       previousGroup.current = groupKey
-      if (page !== 1) { setPage(1); return }
+      setPage(1)
     }
+  }, [groupKey])
+  useEffect(() => {
+    const query = JSON.parse(queryKey)
+    if (!query.isAuthenticated) return
     const controller = new AbortController()
-    setLoading(true)
-    setError('')
-    let body
-    try {
-      body = buildCreditRequest(applied, page, limit)
-      if (columnRequestFilters.length) body.filters = [...(body.filters || []), ...columnRequestFilters]
-    } catch (requestError) {
-      setError(requestError.message)
-      setResult({ rows: [], total: null, pages: null })
-      setLoading(false)
-      return () => controller.abort()
-    }
-    if (!applyReportGroupFilter(body, JSON.parse(groupKey))) {
-      setResult({ rows: [], total: 0, pages: 1 })
-      setLoading(false)
-      return () => controller.abort()
-    }
-    brokerAPI.getCreditReport(body, { signal: controller.signal })
-      .then(response => {
-        if (!controller.signal.aborted) setResult(parseCreditReport(response))
-      })
-      .catch(requestError => {
-        if (!controller.signal.aborted) {
-          setResult({ rows: [], total: null, pages: null })
-          setError(requestError?.response?.data?.message || requestError.message || 'Unable to load credit report.')
+    const isCurrent = () => currentQueryRef.current === queryKey && !controller.signal.aborted
+    const load = async () => {
+      try {
+        const body = buildCreditRequest(query.applied, query.page, query.limit)
+        if (query.columnRequestFilters.length) body.filters = [...(body.filters || []), ...query.columnRequestFilters]
+        if (!applyReportGroupFilter(body, JSON.parse(query.groupKey))) {
+          if (isCurrent()) setResult({ key: queryKey, rows: [], total: 0, pages: 1 })
+          return
         }
-      })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+        const next = await fetchCreditCandidates(brokerAPI.getCreditReport, body, Boolean(query.timeFilter), controller.signal, isCurrent)
+        if (!next || !isCurrent()) return
+        const rows = filterCreditTime(next.rows, query.timeFilter, query.applied.sortBy, query.applied.sortOrder)
+        setResult({ ...next, key: queryKey, rows, total: query.timeFilter ? rows.length : next.total })
+      } catch (requestError) {
+        if (isCurrent()) setResult({ key: queryKey, rows: [], total: null, pages: null,
+          error: requestError?.response?.data?.message || requestError.message || 'Unable to load credit report.' })
+      }
+    }
+    load()
     return () => controller.abort()
-  }, [applied, page, limit, refresh, isAuthenticated, groupKey, columnRequestFilters])
+  }, [queryKey])
 
   useEffect(() => {
     if (!panel) return
@@ -277,17 +293,28 @@ export default function CreditReportPage() {
   }
   const [exporting, setExporting] = useState(false)
   const exportPage = withExportLoading(async () => {
+    if (!mountedRef.current || exportControllerRef.current || currentQueryRef.current !== queryKey) return
+    const controller = new AbortController()
+    exportControllerRef.current = controller
+    const isCurrent = () => mountedRef.current && currentQueryRef.current === queryKey && !controller.signal.aborted
     setExporting(true)
     try {
-      const rows = await fetchAllRows(async exportPageNumber => {
-        const body = buildCreditRequest(applied, exportPageNumber, EXPORT_CHUNK_SIZE)
-        if (!applyReportGroupFilter(body, JSON.parse(groupKey))) return { rows: [], total: 0, pages: 1 }
-        return brokerAPI.getCreditReport(body).then(parseCreditReport)
-      })
+      const body = buildCreditRequest(applied, 1, EXPORT_CHUNK_SIZE)
+      const conditions = columnRequestFilters.filter(item => item.field !== 'time')
+      if (conditions.length) body.filters = [...(body.filters || []), ...conditions]
+      if (!applyReportGroupFilter(body, JSON.parse(groupKey))) return
+      const next = await fetchCreditCandidates(brokerAPI.getCreditReport, body, true, controller.signal, isCurrent)
+      if (!next || !isCurrent()) return
+      const rows = filterCreditTime(next.rows, timeFilter, applied.sortBy, applied.sortOrder)
       downloadCsv(columns.map(([, label]) => label), rows.map(row => columns.map(([key]) => display(row, key))), 'credit-report.csv')
     } catch (exportError) {
-      window.alert(exportError?.response?.data?.message || exportError.message || 'Unable to export report.')
-    } finally { setExporting(false) }
+      if (isCurrent()) window.alert(exportError?.response?.data?.message || exportError.message || 'Unable to export report.')
+    } finally {
+      if (exportControllerRef.current === controller) {
+        exportControllerRef.current = null
+        if (mountedRef.current) setExporting(false)
+      }
+    }
   })
   const totalPages = result.pages ?? (result.total == null ? null : Math.max(1, Math.ceil(result.total / limit)))
   const hasNext = totalPages == null ? result.rows.length === limit : page < totalPages
@@ -317,7 +344,7 @@ export default function CreditReportPage() {
       filterRef={node => { filterRefs.current[key] = node }}
       active={Boolean(columnFilters[`${key}_custom`])}
       onClick={openColumnFilter}
-      className={mobile ? 'ml-1 !h-4 !w-4' : 'ml-1'}
+      className={mobile ? 'ml-0.5' : 'ml-1'}
     />
   )
   const iconButton = 'h-10 w-9 md:h-8 md:w-8 shrink-0 rounded-xl md:rounded-md border border-[#E5E7EB] bg-white text-[#4B5563] shadow-sm flex items-center justify-center hover:bg-gray-50 disabled:opacity-40'

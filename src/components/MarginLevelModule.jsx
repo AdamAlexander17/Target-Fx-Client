@@ -10,8 +10,11 @@ import FilterModal from './FilterModal'
 
 import ClientDetailsMobileModal from './ClientDetailsMobileModal'
 import ColumnChooserList from './ColumnChooserList'
+import ColumnFilterMenu from './ColumnFilterMenu'
+import ColumnFilterTrigger from './ColumnFilterTrigger'
 import { useGroups } from '../contexts/groupContextStore'
-import { applyCumulativeFilters, applySearchFilter, applySorting } from '../utils/mobileFilters'
+import { applyCumulativeFilters, applySearchFilter } from '../utils/mobileFilters'
+import { filterRowsByColumnFilters, sortRowsByColumn } from '../utils/columnFilters'
 
 const formatNum = (n, decimals = 2) => {
   const v = Number(n || 0)
@@ -37,6 +40,14 @@ const getMarginLevelPercent = (obj) => {
   if (Number.isNaN(n)) return undefined
   if (n > 0 && n <= 1) return n * 100
   return n
+}
+
+// Filter/sort the same raw values used by the cells, never compact display strings.
+const marginColumnValue = (account, key) => {
+  if (key === 'marginLevel') return getMarginLevelPercent(account)
+  if (key === 'marginFree') return Number(account.margin_free ?? account.marginFree ?? 0)
+  if (key === 'name') return account.name ?? ''
+  return Number(account[key] ?? 0)
 }
 
 export default function MarginLevelModule() {
@@ -70,6 +81,10 @@ export default function MarginLevelModule() {
   // Fetch margin-call clients from REST API
   const [sortColumn, setSortColumn] = useState(null)
   const [sortDirection, setSortDirection] = useState('asc')
+  const [columnFilters, setColumnFilters] = useState({})
+  const [openColumn, setOpenColumn] = useState(null)
+  const [columnFilterRect, setColumnFilterRect] = useState(null)
+  const columnFilterRefs = useRef({})
   const marginRequestRef = useRef(0)
   const fetchMarginCallClients = async () => {
     const requestId = ++marginRequestRef.current
@@ -248,8 +263,14 @@ export default function MarginLevelModule() {
     return applySearchFilter(cumulativeFilteredAccounts, searchInput, ['login', 'name', 'group'])
   }, [cumulativeFilteredAccounts, searchInput])
 
-  // Use searched accounts as ibFilteredAccounts for compatibility
-  const ibFilteredAccounts = searchedAccounts
+  // The endpoint supplies the full margin-call list; filter before summaries and paging.
+  const ibFilteredAccounts = useMemo(() => filterRowsByColumnFilters(
+    searchedAccounts,
+    Object.fromEntries(Object.entries(columnFilters).map(([key, filter]) => [key, {
+      ...filter, type: filter.type === 'doesNotContain' ? 'notContains' : filter.type
+    }])),
+    marginColumnValue
+  ), [searchedAccounts, columnFilters])
 
   // Calculate summary statistics from the fully filtered data
   const summaryStats = useMemo(() => {
@@ -269,28 +290,12 @@ export default function MarginLevelModule() {
   }, [ibFilteredAccounts])
 
   // Sort the filtered accounts
-  const sortedAccounts = useMemo(() => {
-    if (!sortColumn) return ibFilteredAccounts
-
-    // Special handling for marginLevel column
-    if (sortColumn === 'marginLevel') {
-      return [...ibFilteredAccounts].sort((a, b) => {
-        const aVal = getMarginLevelPercent(a) || 0
-        const bVal = getMarginLevelPercent(b) || 0
-        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal
-      })
-    }
-
-    // Map column keys to actual data fields for sorting
-    const columnKeyMapping = {
-      'marginFree': 'margin_free'
-    }
-    const sortKey = columnKeyMapping[sortColumn] || sortColumn
-
-    return applySorting(ibFilteredAccounts, sortKey, sortDirection)
-  }, [ibFilteredAccounts, sortColumn, sortDirection])
+  const sortedAccounts = useMemo(() => sortRowsByColumn(
+    ibFilteredAccounts, marginColumnValue, sortColumn, sortDirection
+  ), [ibFilteredAccounts, sortColumn, sortDirection])
 
   const handleSort = (columnKey) => {
+    setCurrentPage(1)
     if (sortColumn === columnKey) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
     } else {
@@ -387,7 +392,7 @@ export default function MarginLevelModule() {
         value = fmtMoney(account.margin || 0)
         break
       case 'marginFree':
-        value = fmtMoney(account.margin_free || account.marginFree || 0)
+        value = fmtMoney(marginColumnValue(account, key))
         break
       case 'marginLevel':
         {
@@ -604,7 +609,7 @@ const ml = getMarginLevelPercent(account)
                         ...(isColPinned(col) ? { left: `${pinnedOffsets[col.key] || 0}px` } : {})
                       }}
                     >
-                      <span>{col.label}</span>
+                      <span className="min-w-0 truncate">{col.label}</span>
                       {sortColumn === col.key && (
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="ml-1">
                           <path 
@@ -616,6 +621,17 @@ const ml = getMarginLevelPercent(account)
                           />
                         </svg>
                       )}
+                      <ColumnFilterTrigger
+                        columnKey={col.key}
+                        label={col.label}
+                        active={Boolean(columnFilters[col.key])}
+                        filterRef={node => { columnFilterRefs.current[col.key] = node }}
+                        onClick={(key, rect) => {
+                          setOpenColumn(previous => previous === key ? null : key)
+                          setColumnFilterRect(rect)
+                        }}
+                        className="ml-auto"
+                      />
                     </div>
                   ))}
                 </div>
@@ -689,6 +705,25 @@ const ml = getMarginLevelPercent(account)
         </div>
       </div>
 
+
+      {openColumn && (
+        <ColumnFilterMenu
+          key={openColumn}
+          label={allColumns.find(column => column.key === openColumn)?.label || openColumn}
+          kind={openColumn === 'name' ? 'text' : 'number'}
+          value={columnFilters[openColumn]}
+          sortDirection={sortColumn === openColumn ? sortDirection : null}
+          anchorRef={() => columnFilterRefs.current[openColumn]}
+          initialRect={columnFilterRect}
+          onSort={direction => { setSortColumn(openColumn); setSortDirection(direction); setCurrentPage(1) }}
+          onApply={filter => { setColumnFilters(previous => ({ ...previous, [openColumn]: filter })); setCurrentPage(1) }}
+          onClear={() => {
+            setColumnFilters(previous => { const next = { ...previous }; delete next[openColumn]; return next })
+            setCurrentPage(1)
+          }}
+          onClose={() => setOpenColumn(null)}
+        />
+      )}
 
       {/* Bottom Navigation */}
       <MobileBottomNav onMore={() => setIsSidebarOpen(true)} />

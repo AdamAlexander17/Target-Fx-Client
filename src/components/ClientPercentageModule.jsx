@@ -2,7 +2,7 @@ import Sidebar from './Sidebar'
 import BrokerCreditSummary from './BrokerCreditSummary'
 import MobileBottomNav from './MobileBottomNav'
 import { withExportLoading } from '../utils/exportLoading'
-import React, { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { AskAiIcon, ReportsIcon, ReportSubIcon, TutorialIcon, BrokerageCalcIcon } from './ReportIcons'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '../contexts/dataContextStore'
@@ -16,12 +16,15 @@ import LoginGroupModal from './LoginGroupModal'
 import SetCustomPercentageModal from './SetCustomPercentageModal'
 import ClientDetailsMobileModal from './ClientDetailsMobileModal'
 import ColumnChooserList from './ColumnChooserList'
+import ColumnFilterMenu from './ColumnFilterMenu'
+import ColumnFilterTrigger from './ColumnFilterTrigger'
 import AutoPercentageModal from './AutoPercentageModal'
 import { useGroups } from '../contexts/groupContextStore'
 import { applyCumulativeFilters } from '../utils/mobileFilters'
-import { getPercentageType, filterPercentageTypes, percentageSearchType, loadPercentageClients, PERCENTAGE_TYPES } from '../utils/percentageType'
+import { getPercentageType, filterPercentageTypes, loadPercentageClients, PERCENTAGE_TYPES } from '../utils/percentageType'
 import { createLatestRequest } from '../utils/latestRequest'
-import { formatDate } from '../utils/dateFormatter'
+import { formatDate, formatTime } from '../utils/dateFormatter'
+import { filterRowsByColumnFilters, sortRowsByColumn } from '../utils/columnFilters'
 
 
 
@@ -36,6 +39,18 @@ const formatCompactIndian = (v) => {
   return sign + abs.toFixed(2)
 }
 
+const percentageColumnValue = (item, key) => {
+  if (key === 'login') return Number(item.client_login ?? item.login)
+  if (key === 'percentage') return Number(item.percentage ?? 0)
+  if (key === 'type') return getPercentageType(item)
+  if (key === 'updatedAt') {
+    // Match the server wall clock displayed by formatDate, including epoch/string aliases.
+    const parts = formatTime(item.updated_at, '').match(/^(\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}):(\d{2}):(\d{2}))?$/)
+    return parts ? Date.UTC(+parts[3], +parts[2] - 1, +parts[1], +(parts[4] || 0), +(parts[5] || 0), +(parts[6] || 0)) / 1000 : undefined
+  }
+  return item[key] ?? ''
+}
+
 export default function ClientPercentageModule() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -47,7 +62,10 @@ export default function ClientPercentageModule() {
 
   const [searchInput, setSearchInput] = useState('')
   const [selectedTypes, setSelectedTypes] = useState([])
-  const useLocalTypeFiltering = selectedTypes.length > 0 || percentageSearchType(searchInput) !== null
+  const [columnFilters, setColumnFilters] = useState({})
+  const [openColumn, setOpenColumn] = useState(null)
+  const [columnFilterRect, setColumnFilterRect] = useState(null)
+  const columnFilterRefs = useRef({})
   const percentageRequests = useRef(createLatestRequest())
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
@@ -65,11 +83,17 @@ export default function ClientPercentageModule() {
   const [isColumnSelectorOpen, setIsColumnSelectorOpen] = useState(false)
   const [isTypeSheetOpen, setIsTypeSheetOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const serverPage = useLocalTypeFiltering ? 1 : currentPage
   const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768)
   const itemsPerPage = isMobileView ? 15 : 100
   const [sortColumn, setSortColumn] = useState(null)
   const [sortDirection, setSortDirection] = useState('asc')
+  const activeGroup = getActiveGroupFilter('clientpercentage')
+  // No documented API condition filters (or derived Type sort). Consume every page
+  // for local queries; retain lightweight server paging when no query is active.
+  const useLocalFiltering = selectedTypes.length > 0 || searchInput.trim() !== '' ||
+    Object.keys(columnFilters).length > 0 || Boolean(sortColumn) || Boolean(activeGroup) ||
+    filters.hasFloating || filters.hasCredit || filters.noDeposit
+  const serverPage = useLocalFiltering ? 1 : currentPage
   const [visibleColumns, setVisibleColumns] = useState({
     login: true,
     percentage: true,
@@ -194,7 +218,7 @@ export default function ClientPercentageModule() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const fetchAllClientPercentages = async (page = 1) => {
+  const fetchAllClientPercentages = useCallback(async (page = 1) => {
     const isCurrent = percentageRequests.current.start()
     try {
       setLoading(true)
@@ -203,7 +227,7 @@ export default function ClientPercentageModule() {
       // Server-side pagination for both views
       // Some backends use `limit` instead of `page_size` for this endpoint
       const params = isMobileView ? { page, limit: 15 } : { page, limit: 100 }
-      const response = useLocalTypeFiltering
+      const response = useLocalFiltering
         ? await loadPercentageClients(brokerAPI.getAllClientPercentages, { ...params, sort_by: 'login', sort_order: 'asc' }, isCurrent)
         : await brokerAPI.getAllClientPercentages(params)
       if (!isCurrent()) return
@@ -215,6 +239,7 @@ export default function ClientPercentageModule() {
       } catch { /* Retain the fallback when this operation is unavailable. */ }
       const clientsData = payload?.clients || []
       setClients(clientsData)
+      if (useLocalFiltering) setAllClients(clientsData)
       setStats(prev => ({
         total: Number(payload?.total ?? clientsData.length),
         total_custom: Number(payload?.total_custom ?? prev.total_custom),
@@ -222,31 +247,15 @@ export default function ClientPercentageModule() {
         default_percentage: Number(payload?.default_percentage ?? prev.default_percentage)
       }))
 
-      // If we have a total count and allClients is not yet populated, load all for group filtering
-      const total = Number(payload?.total) || clientsData.length
-      if (!useLocalTypeFiltering && total > 0 && allClients.length === 0) {
-        fetchAllForGroupFilter(total)
-      }
-
     } catch (err) {
       if (!isCurrent()) return
       console.error('Error fetching client percentages:', err)
       setError('Failed to load client percentages')
-      if (useLocalTypeFiltering) setClients([])
+      if (useLocalFiltering) setClients([])
     } finally {
       if (isCurrent()) setLoading(false)
     }
-  }
-
-  // Load ALL records once for client-side group filtering
-  const fetchAllForGroupFilter = async (total) => {
-    try {
-      const response = await brokerAPI.getAllClientPercentages({ page: 1, limit: total })
-      const payload = response?.data?.data || response?.data || {}
-      const all = payload?.clients || []
-      if (all.length > 0) setAllClients(all)
-    } catch { /* Retain the fallback when this operation is unavailable. */ }
-  }
+  }, [isMobileView, useLocalFiltering])
 
   // Handle edit click
   const handleEditClick = (client) => {
@@ -261,26 +270,22 @@ export default function ClientPercentageModule() {
     setSelectedClient(null)
   }
 
-  // Use allClients when a group is active (to filter across all records), else current page
-  const activeGroup = getActiveGroupFilter('clientpercentage')
-  const percentageData = activeGroup && !useLocalTypeFiltering ? allClients : clients
-
   // Apply cumulative filters: Customize View -> IB -> Group
   const ibFilteredData = useMemo(() => {
-    return applyCumulativeFilters(percentageData, {
+    return applyCumulativeFilters(clients, {
       customizeFilters: filters,
       filterByActiveGroup,
       loginField: 'client_login',
       moduleName: 'clientpercentage'
     })
-  }, [percentageData, filters, filterByActiveGroup, activeGroupFilters])
+  }, [clients, filters, filterByActiveGroup, activeGroupFilters])
 
   // Calculate summary statistics
 
 
   // Filter data based on search
   const filteredData = useMemo(() => {
-    let filtered = filterPercentageTypes(ibFilteredData, selectedTypes).filter(item => {
+    const filtered = filterPercentageTypes(ibFilteredData, selectedTypes).filter(item => {
       if (!searchInput.trim()) return true
       const query = searchInput.toLowerCase()
 
@@ -306,49 +311,16 @@ export default function ClientPercentageModule() {
       )
     })
 
-    // Apply sorting
-    if (sortColumn) {
-      filtered.sort((a, b) => {
-        // Map column keys to actual data fields for sorting
-        let aVal, bVal
-
-        if (sortColumn === 'login') {
-          aVal = a.client_login || a.login
-          bVal = b.client_login || b.login
-        } else if (sortColumn === 'updatedAt') {
-          aVal = a.updated_at
-          bVal = b.updated_at
-        } else {
-          aVal = a[sortColumn]
-          bVal = b[sortColumn]
-        }
-
-        if (aVal == null && bVal == null) return 0
-        if (aVal == null) return 1
-        if (bVal == null) return -1
-
-        const aNum = Number(aVal)
-        const bNum = Number(bVal)
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-          return sortDirection === 'asc' ? aNum - bNum : bNum - aNum
-        }
-
-        const aStr = String(aVal).toLowerCase()
-        const bStr = String(bVal).toLowerCase()
-        if (sortDirection === 'asc') {
-          return aStr.localeCompare(bStr)
-        } else {
-          return bStr.localeCompare(aStr)
-        }
-      })
-    }
-
-    return filtered
-  }, [ibFilteredData, searchInput, sortColumn, sortDirection, selectedTypes])
+    const columnFiltered = filterRowsByColumnFilters(filtered,
+      Object.fromEntries(Object.entries(columnFilters).map(([key, filter]) => [key, {
+        ...filter, type: filter.type === 'doesNotContain' ? 'notContains' : filter.type
+      }])), percentageColumnValue)
+    return sortRowsByColumn(columnFiltered, percentageColumnValue, sortColumn, sortDirection)
+  }, [ibFilteredData, searchInput, sortColumn, sortDirection, selectedTypes, columnFilters])
 
   const handleSort = (columnKey) => {
-    // The API does not support sorting by percentage type.
-    if (columnKey === 'type') return
+    if (columnKey === 'actions') return
+    setCurrentPage(1)
     if (sortColumn === columnKey) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
     } else {
@@ -400,36 +372,32 @@ export default function ClientPercentageModule() {
     }
   }, [stats, numericMode])
 
-  // Fetch data when page changes (only in non-group mode)
+  // Page through the API only in unfiltered mode; local queries load a complete snapshot.
   useEffect(() => {
     const requests = percentageRequests.current
-    if (!activeGroup || useLocalTypeFiltering) {
-      fetchAllClientPercentages(serverPage)
-    }
+    fetchAllClientPercentages(serverPage)
     return () => requests.invalidate()
-  }, [serverPage, isMobileView, useLocalTypeFiltering, activeGroup])
+  }, [serverPage, fetchAllClientPercentages])
 
-  // Reset to page 1 and ensure allClients is loaded when group filter changes
+  // Query changes must not leave the user on an empty later page.
   useEffect(() => {
     setCurrentPage(1)
-    if (activeGroup && !useLocalTypeFiltering && allClients.length === 0 && stats.total > 0) {
-      fetchAllForGroupFilter(stats.total)
-    }
-  }, [activeGroup])
+  }, [activeGroup, activeGroupFilters, filters, columnFilters, selectedTypes, searchInput, sortColumn, sortDirection])
 
-  // Pagination — when group is active we paginate filteredData client-side
+  // All local conditions and sorting run before pagination.
   const paginatedData = useMemo(() => {
-    if (activeGroup || useLocalTypeFiltering) {
+    if (useLocalFiltering) {
       const start = (currentPage - 1) * itemsPerPage
       return filteredData.slice(start, start + itemsPerPage)
     }
     return filteredData
-  }, [activeGroup, filteredData, currentPage, itemsPerPage, useLocalTypeFiltering])
+  }, [filteredData, currentPage, itemsPerPage, useLocalFiltering])
 
   const totalPages = useMemo(() => {
-    if (activeGroup || useLocalTypeFiltering) return Math.max(1, Math.ceil(filteredData.length / itemsPerPage))
+    if (useLocalFiltering) return Math.max(1, Math.ceil(filteredData.length / itemsPerPage))
     return Math.max(1, Math.ceil(stats.total / itemsPerPage))
-  }, [activeGroup, filteredData.length, stats.total, itemsPerPage, useLocalTypeFiltering])
+  }, [filteredData.length, stats.total, itemsPerPage, useLocalFiltering])
+  useEffect(() => { setCurrentPage(page => Math.min(page, totalPages)) }, [totalPages])
 
   // Get visible columns
   const allColumns = [
@@ -498,7 +466,7 @@ export default function ClientPercentageModule() {
           </div>
         )
       case 'percentage':
-        value = item.percentage ? `${item.percentage}%` : '-'
+        value = item.percentage != null ? `${item.percentage}%` : '-'
         break
       case 'type':
         value = getPercentageType(item)
@@ -686,7 +654,7 @@ export default function ClientPercentageModule() {
   const handleExport = withExportLoading(async (mode = 'all') => {
     if (exporting) return
     if (mode === 'selected' && selectedRows.size === 0) { alert('No rows selected'); return }
-    if (useLocalTypeFiltering) {
+    if (useLocalFiltering) {
       if (loading || error) {
         alert('Wait for the filtered results to load successfully before exporting.')
         return
@@ -737,7 +705,7 @@ export default function ClientPercentageModule() {
   })
 
   const handleExportToCSV = withExportLoading(() => {
-    if (useLocalTypeFiltering && (loading || error)) {
+    if (useLocalFiltering && (loading || error)) {
       alert('Wait for the filtered results to load successfully before exporting.')
       return
     }
@@ -1061,7 +1029,7 @@ export default function ClientPercentageModule() {
                       className="w-full text-left px-2.5 h-9 rounded-xl text-[13px] text-[#1F2937] hover:bg-white/70 flex items-center justify-between"
                     >
                       <span>Download All</span>
-                      <span className="text-[10px] text-gray-400">{useLocalTypeFiltering ? filteredData.length : stats.total || ''}</span>
+                      <span className="text-[10px] text-gray-400">{useLocalFiltering ? filteredData.length : stats.total || ''}</span>
                     </button>
                     <button
                       onClick={() => { setShowExportMenu(false); handleExport('selected') }}
@@ -1205,8 +1173,8 @@ export default function ClientPercentageModule() {
                   {activeColumns.map(col => (
                     <div 
                       key={col.key}
-                      onClick={() => handleSort(col.key)}
-                      className={`h-[32px] flex items-center justify-start px-1 select-none ${col.key === 'type' ? '' : 'cursor-pointer'} ${
+                      onClick={col.key === 'actions' ? undefined : () => handleSort(col.key)}
+                      className={`h-[32px] flex items-center justify-start px-1 select-none ${col.key === 'actions' ? '' : 'cursor-pointer'} ${
                         isColPinned(col) ? 'sticky z-30 bg-blue-500' : ''
                       }`}
                       style={{
@@ -1223,6 +1191,19 @@ export default function ClientPercentageModule() {
                       <span className="truncate">{col.label}</span>
                       {sortColumn === col.key && (
                         <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                      {col.key !== 'actions' && (
+                        <ColumnFilterTrigger
+                          columnKey={col.key}
+                          label={col.label}
+                          active={Boolean(columnFilters[col.key])}
+                          filterRef={node => { columnFilterRefs.current[col.key] = node }}
+                          onClick={(key, rect) => {
+                            setOpenColumn(previous => previous === key ? null : key)
+                            setColumnFilterRect(rect)
+                          }}
+                          className="ml-auto"
+                        />
                       )}
                     </div>
                   ))}
@@ -1314,6 +1295,25 @@ export default function ClientPercentageModule() {
           </div>
         </div>
       </div>
+
+      {openColumn && openColumn !== 'actions' && (
+        <ColumnFilterMenu
+          key={openColumn}
+          label={allColumns.find(column => column.key === openColumn)?.label || openColumn}
+          kind={openColumn === 'updatedAt' ? 'date' : ['login', 'percentage'].includes(openColumn) ? 'number' : 'text'}
+          value={columnFilters[openColumn]}
+          sortDirection={sortColumn === openColumn ? sortDirection : null}
+          anchorRef={() => columnFilterRefs.current[openColumn]}
+          initialRect={columnFilterRect}
+          onSort={direction => { setSortColumn(openColumn); setSortDirection(direction); setCurrentPage(1) }}
+          onApply={filter => { setColumnFilters(previous => ({ ...previous, [openColumn]: filter })); setCurrentPage(1) }}
+          onClear={() => {
+            setColumnFilters(previous => { const next = { ...previous }; delete next[openColumn]; return next })
+            setCurrentPage(1)
+          }}
+          onClose={() => setOpenColumn(null)}
+        />
+      )}
 
       {/* Bottom Navigation */}
       <MobileBottomNav onMore={() => setIsSidebarOpen(true)} />

@@ -29,6 +29,16 @@ const fmtMoney = (n) => {
   return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+// Read the client-level API value only; exchange commissions need not add up to it.
+const readTotalCommission = (row) => {
+  const value = rowFieldValue(row, 'TotalCommission', ['totalCommission', 'total_commission'])
+  const number = Number(value)
+  return value !== '' && Number.isFinite(number) ? number : null
+}
+
+const totalCommissionFor = (rows, apiTotals) => readTotalCommission(apiTotals) ??
+  rows.reduce((sum, row) => sum + (readTotalCommission(row) ?? 0), 0)
+
 const fmtLots = (n) => {
   const num = Number(n)
   if (!Number.isFinite(num)) return '0.00'
@@ -81,6 +91,8 @@ const unwrapExchangeResponse = (response) => {
       }
       return
     }
+    const namedTotals = node.Totals ?? node.totals
+    if (!totals && namedTotals && typeof namedTotals === 'object' && !Array.isArray(namedTotals)) totals = namedTotals
     if (!totals && isTotalsShape(node)) totals = node
     if (!settlementWeek && isSettlementWeekShape(node)) settlementWeek = node
     if (!pagination && isPaginationShape(node) && !isTotalsShape(node)) pagination = node
@@ -312,6 +324,7 @@ const ReportsExchangePage = () => {
     if (key === 'login') return rowFieldValue(row, 'login', ['mt5Account'])
     if (key === 'name') return rowFieldValue(row, 'name', ['clientName'])
     if (key === 'agent_commission') return rowFieldValue(row, 'agentCommission', ['agent_commission'])
+    if (key === 'total_commission') return readTotalCommission(row) ?? 0
     return rowFieldValue(row, key)
   }
   const filteredClients = filterRows(clients, exchangeValue)
@@ -364,12 +377,13 @@ const ReportsExchangePage = () => {
     if (detectedExchangeColumns.length) setLastExchangeColumns(detectedExchangeColumns)
   }, [detectedExchangeColumns])
   const exchangeColumns = detectedExchangeColumns.length ? detectedExchangeColumns : lastExchangeColumns
-  const tableColumnCount = 3 + exchangeColumns.length * 3
+  const tableColumnCount = 4 + exchangeColumns.length * 3
 
-  // Totals per exchange (Commission, Lots, Volume) + AgentCommission
+  // Totals per exchange (Commission, Lots, Volume) + client-level commissions.
   const totals = useMemo(() => {
     const perEx = {}
     exchangeColumns.forEach(name => { perEx[name] = { Commission: 0, Lots: 0, Volume: 0 } })
+    const totalCommission = totalCommissionFor(pagedClients, responseTotals)
 
     if (responseTotals) {
       const apiExchanges = responseTotals.Exchanges ?? responseTotals.exchanges ?? []
@@ -383,6 +397,7 @@ const ReportsExchangePage = () => {
       })
       return {
         perEx,
+        totalCommission,
         agentCommission: Number(responseTotals.AgentCommission ?? responseTotals.agentCommission ?? 0)
       }
     }
@@ -398,8 +413,8 @@ const ReportsExchangePage = () => {
         perEx[name].Volume += Number(e.Volume || 0)
       })
     })
-    return { perEx, agentCommission }
-  }, [clients, exchangeColumns, responseTotals])
+    return { perEx, agentCommission, totalCommission }
+  }, [pagedClients, exchangeColumns, responseTotals])
 
   // Lookup helper: exchange row for a given client
   const getExchange = (client, name) => {
@@ -418,7 +433,7 @@ const ReportsExchangePage = () => {
       filterRef={node => { filterRefs.current[key] = node }}
       active={Boolean(columnFilters[`${key}_custom`])}
       onClick={openColumnFilter}
-      className={mobile ? 'ml-1 !h-4 !w-4' : 'ml-1'}
+      className={mobile ? 'ml-0.5' : 'ml-1'}
       data-kind={kind}
     />
   )
@@ -459,6 +474,7 @@ const ReportsExchangePage = () => {
         limit: 500
       }
       const exportClients = []
+      let exportTotalCommission = null
       let page = 1
       let totalPages = null
 
@@ -470,6 +486,8 @@ const ReportsExchangePage = () => {
         const exportData = unwrapExchangeResponse(response)
         const pageClients = exportData?.Clients ?? []
         exportClients.push(...pageClients)
+        // API totals describe the filtered report, not a sum of page totals.
+        exportTotalCommission ??= readTotalCommission(exportData?.Totals)
 
         const pagination = exportData?.Pagination ?? {}
         const parsedTotalPages = Number(
@@ -495,7 +513,7 @@ const ReportsExchangePage = () => {
         })
       })
 
-      const fixedColumnCount = 3
+      const fixedColumnCount = 4
       const totalColumns = fixedColumnCount + exportColumns.length * 3
       const selectedWeek = weeks.find(week => String(week.id) === String(selectedWeekId))
       const exportWeek = settlementWeek || selectedWeek || {}
@@ -511,7 +529,7 @@ const ReportsExchangePage = () => {
       worksheetData[0][0] = exportTitle
       const groupedHeader = Array(totalColumns).fill('')
       const subHeader = Array(totalColumns).fill('')
-      ;['Login', 'Name', 'Agent Commission'].forEach((label, index) => {
+      ;['Login', 'Name', 'Agent Commission', 'Total Commission'].forEach((label, index) => {
         groupedHeader[index] = label
         subHeader[index] = label
       })
@@ -524,14 +542,14 @@ const ReportsExchangePage = () => {
       })
       worksheetData.push(groupedHeader, subHeader)
       exportClients.forEach(client => {
-        const cells = [String(client.Login ?? client.login ?? ''), client.Name ?? client.name ?? '', Number(client.AgentCommission ?? client.agentCommission ?? 0)]
+        const cells = [String(client.Login ?? client.login ?? ''), client.Name ?? client.name ?? '', Number(client.AgentCommission ?? client.agentCommission ?? 0), readTotalCommission(client) ?? 0]
         exportColumns.forEach(name => {
           const exchange = (client.Exchanges || []).find(item => (item.Exchange || 'UNKNOWN') === name)
           cells.push(Number(exchange?.Lots || 0), Number(exchange?.Volume || 0), Number(exchange?.Commission || 0))
         })
         worksheetData.push(cells)
       })
-      const totalRow = ['Totals', `${exportClients.length} clients`, exportClients.reduce((sum, client) => sum + Number(client.AgentCommission ?? client.agentCommission ?? 0), 0)]
+      const totalRow = ['Totals', `${exportClients.length} clients`, exportClients.reduce((sum, client) => sum + Number(client.AgentCommission ?? client.agentCommission ?? 0), 0), exportTotalCommission ?? totalCommissionFor(exportClients)]
       exportColumns.forEach(name => {
         const exchangeTotals = exportClients.reduce((sum, client) => {
           const exchange = (client.Exchanges || []).find(item => (item.Exchange || 'UNKNOWN') === name)
@@ -605,6 +623,7 @@ const ReportsExchangePage = () => {
       worksheet.A2.v = 'Client Details'
       worksheet.B2.v = ''
       worksheet.C2.v = ''
+      worksheet.D2.v = ''
       worksheet['!autofilter'] = {
         ref: XLSX.utils.encode_range({ s: { r: 2, c: 0 }, e: { r: worksheetData.length - 2, c: lastColumn } })
       }
@@ -1043,6 +1062,7 @@ const ReportsExchangePage = () => {
                       <th rowSpan={2} className="relative z-30 bg-blue-600 text-white px-3 py-3 text-left font-semibold uppercase tracking-wide text-[11px] border-r border-blue-500/60 sticky left-0"><span className="inline-flex items-center">Login{filterIconFor('login', 'Login')}</span></th>
                       <th rowSpan={2} className="bg-blue-600 text-white px-3 py-3 text-left font-semibold uppercase tracking-wide text-[11px] border-r border-blue-500/60"><span className="inline-flex items-center">Name{filterIconFor('name', 'Name')}</span></th>
                       <th rowSpan={2} className="bg-blue-600 text-white px-3 py-3 text-right font-semibold uppercase tracking-wide text-[11px] border-r border-blue-500/60"><span className="inline-flex items-center">Agent Commission{filterIconFor('agent_commission', 'Agent Commission', 'number')}</span></th>
+                      <th rowSpan={2} className="bg-blue-600 text-white px-3 py-3 text-right font-semibold uppercase tracking-wide text-[11px] border-r border-blue-500/60"><span className="inline-flex items-center">Total Commission{filterIconFor('total_commission', 'Total Commission', 'number')}</span></th>
                       {exchangeColumns.map(name => (
                         <th key={name} colSpan={3} className="bg-blue-600 text-white px-3 py-2 text-center font-semibold uppercase tracking-wide text-[11px] border-r-2 border-r-[#94A3B8] border-b border-white/25">
                           {name}
@@ -1085,6 +1105,9 @@ const ReportsExchangePage = () => {
                         <td className="px-3 py-2 text-right border-b border-r border-[#E1E1E1] tabular-nums text-[#4B4B4B]">
                           {fmtMoney(c.AgentCommission)}
                         </td>
+                        <td className={`px-3 py-2 text-right border-b border-r border-[#E1E1E1] tabular-nums ${(readTotalCommission(c) ?? 0) < 0 ? 'text-[#EF4444]' : (readTotalCommission(c) ?? 0) > 0 ? 'text-[#059669]' : 'text-[#6B7280]'}`}>
+                          {fmtMoney(readTotalCommission(c) ?? 0)}
+                        </td>
                         {exchangeColumns.map(name => {
                           const ex = getExchange(c, name)
                           const commission = Number(ex?.Commission || 0)
@@ -1111,6 +1134,9 @@ const ReportsExchangePage = () => {
                       <td className="sticky bottom-0 z-20 bg-[#F8FAFC] px-3 py-2.5 border-t border-[#E1E1E1] text-[#6B7280]">{totalClients} clients</td>
                       <td className="sticky bottom-0 z-20 bg-[#F8FAFC] px-3 py-2.5 border-t border-[#E1E1E1] text-right tabular-nums">
                         {fmtMoney(totals.agentCommission)}
+                      </td>
+                      <td className={`sticky bottom-0 z-20 bg-[#F8FAFC] px-3 py-2.5 border-t border-[#E1E1E1] text-right tabular-nums ${totals.totalCommission < 0 ? 'text-[#EF4444]' : totals.totalCommission > 0 ? 'text-[#059669]' : 'text-[#6B7280]'}`}>
+                        {fmtMoney(totals.totalCommission)}
                       </td>
                       {exchangeColumns.map(name => {
                         const t = totals.perEx[name] || { Commission: 0, Lots: 0, Volume: 0 }
@@ -1142,6 +1168,7 @@ const ReportsExchangePage = () => {
           { key: 'login', label: 'Login', kind: 'text' },
           { key: 'name', label: 'Name', kind: 'text' },
           { key: 'agent_commission', label: 'Agent Commission', kind: 'number' },
+          { key: 'total_commission', label: 'Total Commission', kind: 'number' },
         ].find(item => item.key === openFilterColumn)
         if (!column) return null
         return (

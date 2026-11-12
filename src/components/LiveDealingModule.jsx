@@ -3,7 +3,7 @@ import BrokerCreditSummary from './BrokerCreditSummary'
 import MobileBottomNav from './MobileBottomNav'
 import { withExportLoading } from '../utils/exportLoading'
 import { getPresetRange, QUICK_FILTERS } from '../utils/dealTimePresets'
-import React, { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { AskAiIcon, ReportsIcon, ReportSubIcon, TutorialIcon, BrokerageCalcIcon } from './ReportIcons'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '../contexts/dataContextStore'
@@ -22,6 +22,79 @@ import { brokerAPI } from '../services/api'
 import { applyCumulativeFilters } from '../utils/mobileFilters'
 import useSearchAsYouType from '../hooks/useSearchAsYouType'
 import { formatTime as apiFormatTime, serverNowEpoch } from '../utils/dateFormatter'
+import ColumnFilterTrigger from './ColumnFilterTrigger'
+import ColumnFilterMenu from './ColumnFilterMenu'
+import useColumnFilters from '../hooks/useColumnFilters'
+import { matchesColumnFilter, rowFieldValue, sortRowsByColumn } from '../utils/columnFilters'
+
+const DEAL_FIELDS = { netType: 'action', netVolume: 'volume', averagePrice: 'price', totalProfit: 'profit' }
+const dealFilterKind = key => key === 'time' ? 'date' : ['symbol', 'netType', 'action', 'entry'].includes(key) ? 'text' : 'number'
+const dealFilterModel = filters => Object.fromEntries(Object.entries(filters).map(([key, filter]) => [key, {
+  ...filter, type: filter.type === 'doesNotContain' ? 'notContains' : filter.type
+}]))
+const dealEpoch = raw => {
+  // Read exactly the fields displayed by the API formatter, never Date.parse's
+  // timezone interpretation. Milliseconds compare at the displayed second.
+  const parts = apiFormatTime(raw, '-').match(/^(\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}):(\d{2}):(\d{2}))?$/)
+  if (!parts) return ''
+  const [, day, month, year, hour = '0', minute = '0', second = '0'] = parts
+  const values = [year, month, day, hour, minute, second].map(Number)
+  const date = new Date(Date.UTC(values[0], values[1] - 1, ...values.slice(2)))
+  const actual = [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()]
+  return actual.every((value, index) => value === values[index]) ? date.getTime() / 1000 : ''
+}
+const dealRawValue = (row, key) => {
+  const raw = row.rawData || row
+  if (key === 'time') return dealEpoch(raw.time || raw.timestamp || row.timestamp || raw.timeStr || raw.timestampStr || row.timestampStr)
+  if (key === 'deal') return rowFieldValue(raw, 'deal', ['id']) || row.id || ''
+  if (key === 'appliedPercentage') return rowFieldValue(raw, key, ['applied_percentage'])
+  return rowFieldValue(raw, DEAL_FIELDS[key] || key, [key])
+}
+const dealFilterRows = (rows, filters) => rows.filter(row => Object.entries(dealFilterModel(filters)).every(([key, filter]) => {
+  const column = key.replace(/_custom$/, '')
+  const value = dealRawValue(row, column)
+  if (column === 'time' && value === '') return false
+  // Text equality must not coerce numeric-looking symbols/entry labels to numbers.
+  const textEquality = dealFilterKind(column) === 'text' && ['equal', 'notEqual'].includes(filter.type)
+  return matchesColumnFilter(textEquality ? `text:${String(value).trim().toLowerCase()}` : value,
+    textEquality ? { ...filter, value1: `text:${String(filter.value1).trim().toLowerCase()}` } : filter)
+}))
+const dealSortValue = (row, key) => dealFilterKind(key) === 'text' ? `text:${dealRawValue(row, key)}` : dealRawValue(row, key)
+
+// Column conditions are deliberately NOT sent to deals/search: unsupported
+// conditions can exclude valid candidates before our display-epoch predicate.
+// Follow server caps, validate every page and publish only a complete result.
+const fetchDealResults = async (getAllDeals, { from, to, extraBody }, collectAll, page, limit, signal, isCurrent) => {
+  const rows = []
+  const seen = new Set()
+  let nextPage = collectAll ? 1 : page
+  while (isCurrent() && !signal.aborted) {
+    const response = await getAllDeals(from, to, limit, nextPage, extraBody, { signal })
+    if (!isCurrent() || signal.aborted) return null
+    const payload = response?.data ?? response
+    const batch = payload?.deals ?? payload?.items
+    if (!Array.isArray(batch) || batch.some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
+      throw new Error('Invalid deals response')
+    }
+    const rawTotal = payload?.pagination?.total ?? payload?.total ?? payload?.totalCount ?? payload?.total_count ?? payload?.count
+    const total = rawTotal == null ? null : Number(rawTotal)
+    const validTotal = Number.isFinite(total) && total >= 0 ? total : null
+    if (!collectAll) return { rows: batch, total: validTotal ?? batch.length }
+    if (nextPage === 1 && batch.length) limit = batch.length
+    let added = 0
+    for (const row of batch) {
+      const id = row.deal ?? row.id
+      const key = id == null || id === '' ? JSON.stringify(row) : String(id)
+      if (!seen.has(key)) { seen.add(key); rows.push(row); added++ }
+    }
+    if (batch.length && !added) throw new Error('Deals pagination did not advance')
+    if (!batch.length && validTotal > rows.length) throw new Error('Deals response is incomplete')
+    // Without a total, even a short first page may be a server cap: scan to empty.
+    if (!batch.length || (validTotal > 0 && rows.length >= validTotal)) return { rows, total: null }
+    nextPage++
+  }
+  return null
+}
 
 // Labels for the quick time filter button, including the presets set from the Filter sheet
 const QUICK_TIME_LABELS = { ...Object.fromEntries(QUICK_FILTERS.map(o => [o.value, o.label])), custom: 'Custom', '24h': 'Last 24 Hours', '7d': 'Last 7 Days' }
@@ -48,7 +121,7 @@ const formatTime = (timestamp) => apiFormatTime(timestamp, '-')
 export default function LiveDealingModule() {
   const navigate = useNavigate()
   const { positions: cachedPositions, clients, rawClients, orders } = useData()
-  const { groups, deleteGroup, getActiveGroupFilter, setActiveGroupFilter, filterByActiveGroup, activeGroupFilters } = useGroups()
+  const { groups, deleteGroup, getActiveGroupFilter, getGroupLogins, setActiveGroupFilter, filterByActiveGroup, activeGroupFilters } = useGroups()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [numericMode, setNumericMode] = useState(() => { try { const s = localStorage.getItem('globalDisplayMode'); return s === 'full' ? 'full' : 'compact' } catch { return 'compact' } })
 
@@ -71,9 +144,22 @@ export default function LiveDealingModule() {
   const [isColumnSelectorOpen, setIsColumnSelectorOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 15
-  const [totalDealsCount, setTotalDealsCount] = useState(0)
+  const [serverDealsCount, setServerDealsCount] = useState(0)
+  const [dealsResultKey, setDealsResultKey] = useState(null)
+  const [dealsError, setDealsError] = useState('')
   const [sortColumn, setSortColumn] = useState('time')
   const [sortDirection, setSortDirection] = useState('desc')
+  const columnFilters = useColumnFilters()
+  const activeColumnFilters = columnFilters.filters
+  const hasColumnFilters = Object.keys(activeColumnFilters).length > 0
+  // GroupContext's getGroupLogins is recreated on render; do not make it a
+  // fetch-effect dependency (each response would otherwise trigger a new fetch).
+  const getGroupLoginsRef = useRef(getGroupLogins)
+  getGroupLoginsRef.current = getGroupLogins
+  const filterRefs = useRef({})
+  const dealsRequestRef = useRef(0)
+  const currentPageRef = useRef(currentPage)
+  currentPageRef.current = currentPage
   const [isMobileView, setIsMobileView] = useState(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
 
   // Deals state
@@ -224,13 +310,9 @@ export default function LiveDealingModule() {
     return map
   }, [rawClients, clients])
 
-  // Fetch deals from API — server-side pagination (100 per page)
-  const fetchDeals = async (page = currentPage) => {
-    try {
-      // Every fetchDeals call follows a user action (search, filter, sort, page). Live WebSocket
-      // arrivals update `deals` directly, so showing the skeleton here never interrupts them.
-      setLoading(true)
-
+  // Shared by list/export. The overall period stays in server-wall-clock epochs,
+  // just like desktop; column conditions never override or offset this range.
+  const buildDealsRequest = useCallback(() => {
       let from, to
       const presetRange = getPresetRange(timeFilter)
       if (presetRange) {
@@ -254,8 +336,11 @@ export default function LiveDealingModule() {
         to = now
       }
 
-      // Server-side filters — same as desktop
       const apiFilters = []
+      const activeGroup = getActiveGroupFilter('livedealing')
+      let loginCandidates = activeGroup
+        ? [...new Set(getGroupLoginsRef.current(activeGroup).map(Number).filter(Number.isFinite))]
+        : null
       if (moduleFilter === 'deal') {
         apiFilters.push({ field: 'action', operator: 'in', value: ['BUY', 'SELL'] })
       } else if (moduleFilter === 'money') {
@@ -265,25 +350,46 @@ export default function LiveDealingModule() {
       const trimmedSearch = appliedSearch
 
       const extraBody = {
-        sortBy: sortColumn || 'time',
+        sortBy: sortColumn === 'time' ? 'deal_time' : DEAL_FIELDS[sortColumn] || sortColumn || 'deal_time',
         sortOrder: sortDirection || 'desc',
       }
       if (/^\d+$/.test(trimmedSearch)) {
         // The API search parameter matches symbol/comment; logins require a field filter.
-        apiFilters.push({ field: 'login', operator: 'equal', value: Number(trimmedSearch) })
+        const login = Number(trimmedSearch)
+        loginCandidates = loginCandidates === null ? [login] : loginCandidates.filter(value => value === login)
       } else if (trimmedSearch) {
         extraBody.search = trimmedSearch
       }
+      if (loginCandidates !== null) {
+        // Intersect group and numeric search into a single supported login filter.
+        apiFilters.push(loginCandidates.length === 1
+          ? { field: 'login', operator: 'equal', value: loginCandidates[0] }
+          : { field: 'login', operator: 'in', value: loginCandidates.length ? loginCandidates : [-1] })
+      }
       if (apiFilters.length > 0) extraBody.filters = apiFilters
+      return { from, to, extraBody }
+  }, [timeFilter, appliedFromDate, appliedToDate, getActiveGroupFilter, moduleFilter, appliedSearch, sortColumn, sortDirection])
 
-      const response = await brokerAPI.getAllDeals(from, to, itemsPerPage, page, extraBody)
-      const payload = response?.data ?? response
-      const dealsData = payload?.deals || payload?.items || []
-      const apiTotal = payload?.total ?? payload?.totalCount ?? payload?.total_count ?? payload?.count ?? null
-      const rawTotal = apiTotal != null ? Number(apiTotal) : dealsData.length
-      setTotalDealsCount(rawTotal)
+  // Dynamic preset endpoints are recalculated per poll, not used as result keys.
+  // Local pages share a complete candidate set; ordinary pages remain remote.
+  const dealsQueryKey = JSON.stringify([timeFilter, appliedFromDate, appliedToDate, activeColumnFilters,
+    activeGroupFilters.livedealing, groups, moduleFilter, appliedSearch, sortColumn, sortDirection,
+    hasColumnFilters ? null : currentPage])
+  const latestDealsQueryRef = useRef(dealsQueryKey)
+  latestDealsQueryRef.current = dealsQueryKey
+  const hasCurrentDeals = dealsResultKey === dealsQueryKey
 
-      const transformedDeals = dealsData.map(deal => ({
+  const fetchDeals = useCallback(async (page, signal, background = false) => {
+    const requestId = ++dealsRequestRef.current
+    const isCurrent = () => requestId === dealsRequestRef.current && latestDealsQueryRef.current === dealsQueryKey && !signal.aborted
+    try {
+      if (!background) setLoading(true)
+      const query = buildDealsRequest()
+      const result = await fetchDealResults(brokerAPI.getAllDeals, query, hasColumnFilters, page, itemsPerPage, signal, isCurrent)
+      if (!result || !isCurrent()) return
+      setServerDealsCount(result.total ?? 0)
+
+      const transformedDeals = result.rows.map(deal => ({
         id: deal.deal || deal.id,
         timestamp: deal.time || deal.timestamp,
         timestampStr: deal.timeStr || deal.timestampStr || null,
@@ -292,8 +398,8 @@ export default function LiveDealingModule() {
       }))
 
       // On page 1 with no active filters: merge WS deals so live arrivals stay visible
-      const hasActiveFilters = trimmedSearch.length > 0 || moduleFilter !== 'both'
-      if (page === 1 && !hasActiveFilters) {
+      const hasActiveFilters = hasColumnFilters || Boolean(query.extraBody.search || query.extraBody.filters?.length)
+      if (background && page === 1 && !hasActiveFilters) {
         setDeals(prevDeals => {
           const apiIds = new Set(transformedDeals.map(d => d.id))
           const wsExtras = prevDeals.filter(d => !apiIds.has(d.id))
@@ -302,36 +408,52 @@ export default function LiveDealingModule() {
       } else {
         setDeals(transformedDeals)
       }
+      setDealsResultKey(dealsQueryKey)
+      setDealsError('')
       setLoading(false)
     } catch (error) {
+      if (!isCurrent()) return
       console.error('[LiveDealingModule] Error fetching deals:', error)
+      setDeals([])
+      setServerDealsCount(0)
+      setDealsResultKey(null)
+      setDealsError('Failed to load complete deals. Retrying…')
       setLoading(false)
     }
-  }
+  }, [buildDealsRequest, dealsQueryKey, hasColumnFilters])
 
-  // Re-fetch when filters or sort change — reset to page 1 (same as desktop)
-  const isInitialMount = useRef(true)
+  // Reset on semantic query changes, not on local page changes or poll renders.
+  const previousDealsQuery = useRef(buildDealsRequest)
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false
-      fetchDeals(1)
-      return
+    if (previousDealsQuery.current !== buildDealsRequest) setCurrentPage(1)
+    previousDealsQuery.current = buildDealsRequest
+  }, [buildDealsRequest])
+
+  // Serial polling: never overlap multi-page scans; every query change aborts
+  // the old request and its timer. Render keys also guard the pre-effect frame.
+  useEffect(() => {
+    const controller = new AbortController()
+    let timer
+    const load = async (background = false) => {
+      await fetchDeals(currentPageRef.current, controller.signal, background)
+      if (!controller.signal.aborted) timer = setTimeout(() => load(true), 2000)
     }
-    setCurrentPage(1)
-    fetchDeals(1)
-  }, [timeFilter, appliedFromDate, appliedToDate, moduleFilter, sortColumn, sortDirection, appliedSearch])
+    load()
+    return () => { controller.abort(); clearTimeout(timer); dealsRequestRef.current += 1 }
+  }, [fetchDeals])
 
-  // Re-fetch when page changes (server-side pagination — same as desktop)
-  const isFirstPageEffect = useRef(true)
-  useEffect(() => {
-    if (isFirstPageEffect.current) { isFirstPageEffect.current = false; return }
-    fetchDeals(currentPage)
-  }, [currentPage])
+  const hasColumnFiltersRef = useRef(hasColumnFilters)
+  hasColumnFiltersRef.current = hasColumnFilters
 
   // WebSocket subscription
   useEffect(() => {
     // Subscribe to WebSocket updates
     const handleDealAdded = (data) => {
+      // Complete filtered snapshots are refreshed by polling, not mixed with
+      // unvalidated WS records from another query/period.
+      if (hasColumnFiltersRef.current) return
+      // A server page beyond page one must never receive first-page WS insertions.
+      if (currentPageRef.current !== 1) return
       const dealData = data.data || data
       const dealEntry = {
         id: dealData.deal || dealData.id || Date.now() + Math.random(),
@@ -363,6 +485,7 @@ export default function LiveDealingModule() {
 
     // Handle deal updates
     const handleDealUpdated = (data) => {
+      if (hasColumnFiltersRef.current) return
       const dealData = data.data || data
       const dealId = dealData.deal || dealData.id
 
@@ -385,6 +508,7 @@ export default function LiveDealingModule() {
 
     // Handle deal deletions
     const handleDealDeleted = (data) => {
+      if (hasColumnFiltersRef.current) return
       const dealData = data.data || data
       const dealId = dealData.deal || dealData.id
 
@@ -431,14 +555,28 @@ export default function LiveDealingModule() {
     }
   }, [])
 
-  // Server handles time range, search, module filter, sort — just pass deals through
-  const filteredByTime = useMemo(() => deals, [deals])
+  // Repeat conditions locally for WS arrivals, which have not passed through the API.
+  const filteredByTime = useMemo(() => {
+    const { from, to } = buildDealsRequest()
+    return (hasCurrentDeals ? deals : []).filter(deal => {
+      const time = dealRawValue(deal, 'time')
+      return time !== '' && time >= from && time <= to
+    })
+  }, [deals, buildDealsRequest, hasCurrentDeals])
 
-  // Client-side search is disabled (server handles it)
-  const searchedDeals = useMemo(() => filteredByTime, [filteredByTime])
+  // Match the server's login-vs-symbol/comment search semantics for live arrivals.
+  const searchedDeals = useMemo(() => filteredByTime.filter(deal => {
+    const query = appliedSearch.trim().toLowerCase()
+    if (!query) return true
+    if (/^\d+$/.test(query)) return Number(dealRawValue(deal, 'login')) === Number(query)
+    return [dealRawValue(deal, 'symbol'), deal.rawData?.comment].some(value => String(value ?? '').toLowerCase().includes(query))
+  }), [filteredByTime, appliedSearch])
 
-  // Server handles module filter
-  const moduleFilteredDeals = useMemo(() => searchedDeals, [searchedDeals])
+  // WS arrivals must also respect the deal/money toggle.
+  const moduleFilteredDeals = useMemo(() => searchedDeals.filter(deal => {
+    const isDeal = ['BUY', 'SELL'].includes(String(dealRawValue(deal, 'action')).toUpperCase())
+    return moduleFilter === 'both' || (moduleFilter === 'deal' ? isDeal : !isDeal)
+  }), [searchedDeals, moduleFilter])
 
   // Apply cumulative filters: Customize View -> IB -> Group
   const ibFilteredDeals = useMemo(() => {
@@ -450,8 +588,18 @@ export default function LiveDealingModule() {
     })
   }, [moduleFilteredDeals, filters, filterByActiveGroup, activeGroupFilters])
 
-  // Server handles sorting — pass through directly
-  const sortedDeals = useMemo(() => ibFilteredDeals, [ibFilteredDeals])
+  // Filter and sort before trimming the merged server/WS page.
+  const sortedDeals = useMemo(() => sortRowsByColumn(dealFilterRows(ibFilteredDeals, activeColumnFilters), dealSortValue, sortColumn, sortDirection), [ibFilteredDeals, activeColumnFilters, sortColumn, sortDirection])
+  // All local conditions and global sorting precede slicing AND counting.
+  const totalDealsCount = hasCurrentDeals ? (hasColumnFilters ? sortedDeals.length : serverDealsCount) : 0
+  const totalDealsPages = Math.max(1, Math.ceil(totalDealsCount / itemsPerPage))
+  const displayPage = Math.min(currentPage, totalDealsPages)
+  const displayDeals = hasColumnFilters
+    ? sortedDeals.slice((displayPage - 1) * itemsPerPage, displayPage * itemsPerPage)
+    : sortedDeals.slice(0, itemsPerPage)
+  useEffect(() => {
+    if (hasCurrentDeals && currentPage > totalDealsPages) setCurrentPage(totalDealsPages)
+  }, [hasCurrentDeals, currentPage, totalDealsPages])
 
   // Calculate summary statistics
   useMemo(() => {
@@ -531,9 +679,15 @@ export default function LiveDealingModule() {
   const getAppliedPercentage = (raw) => Number(raw?.applied_percentage ?? raw?.appliedPercentage ?? 0)
 
   // Export to CSV
-  const handleExportToCSV = withExportLoading(() => {
+  const handleExportToCSV = withExportLoading(async () => {
     try {
-      const dataToExport = sortedDeals
+      const { from, to, extraBody } = buildDealsRequest()
+      const result = await fetchDealResults(brokerAPI.getAllDeals, { from, to, extraBody }, true, 1, 1000,
+        new AbortController().signal, () => true)
+      const exportRows = result.rows.map(rawData => ({ id: rawData.deal ?? rawData.id, login: rawData.login, rawData }))
+      const dataToExport = sortRowsByColumn(dealFilterRows(applyCumulativeFilters(exportRows, {
+        customizeFilters: filters, filterByActiveGroup, loginField: 'login', moduleName: 'livedealing'
+      }), activeColumnFilters), dealSortValue, sortColumn, sortDirection)
       if (!dataToExport || dataToExport.length === 0) {
         alert('No data to export')
         return
@@ -548,7 +702,7 @@ export default function LiveDealingModule() {
 
           switch(col.key) {
             case 'time':
-              value = formatTime(deal.rawData?.time)
+              value = formatTime(dealRawValue(deal, 'time'))
               break
             case 'login':
               value = deal.login || '-'
@@ -630,7 +784,7 @@ export default function LiveDealingModule() {
 
     switch (key) {
       case 'time':
-        value = formatTime(deal.timestamp || deal.timestampStr || deal.rawData?.timeStr)
+        value = formatTime(dealRawValue(deal, 'time'))
         break
       case 'login':
         value = deal.login || '-'
@@ -1073,6 +1227,10 @@ const profit = deal.rawData?.profit || 0
                       {sortColumn === col.key && (
                         <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
                       )}
+                      <ColumnFilterTrigger columnKey={col.key} label={col.label}
+                        active={Boolean(columnFilters.filters[`${col.key}_custom`])}
+                        filterRef={node => { filterRefs.current[col.key] = node }}
+                        onClick={columnFilters.openMenu} />
                     </div>
                   ))}
                 </div>
@@ -1111,7 +1269,7 @@ const profit = deal.rawData?.profit || 0
                     ))}
                   </>
                 ) : (
-                  sortedDeals.map((deal) => (
+                  displayDeals.map((deal) => (
                     <div data-mobile-data-row="body" 
                       key={deal.id} 
                       className={`grid text-[10px] text-[#4B4B4B] font-outfit bg-transparent border-b border-[#E1E1E1] ${currentPage === 1 && newDealIds.has(deal.id) ? 'new-deal-blink' : 'hover:bg-white/50 transition-colors'}`}
@@ -1136,7 +1294,7 @@ const profit = deal.rawData?.profit || 0
                 {/* Empty state */}
                 {sortedDeals.length === 0 && !loading && (
                   <div className="text-center py-8 text-[#9CA3AF] text-sm">
-                    No deals available
+                    {dealsError || 'No deals available'}
                   </div>
                 )}
                 <div aria-hidden="true" className="mobile-table-end" />
@@ -1146,6 +1304,19 @@ const profit = deal.rawData?.profit || 0
       </div>
       {/* Bottom Navigation */}
       <MobileBottomNav onMore={() => setIsSidebarOpen(true)} />
+
+      {columnFilters.openColumn && (
+        <ColumnFilterMenu key={columnFilters.openColumn}
+          label={allColumns.find(col => col.key === columnFilters.openColumn)?.label || columnFilters.openColumn}
+          kind={dealFilterKind(columnFilters.openColumn)}
+          value={columnFilters.filters[`${columnFilters.openColumn}_custom`]}
+          sortDirection={sortColumn === columnFilters.openColumn ? sortDirection : null}
+          anchorRef={() => filterRefs.current[columnFilters.openColumn]} initialRect={columnFilters.openRect}
+          onSort={direction => { setSortColumn(columnFilters.openColumn); setSortDirection(direction); setCurrentPage(1) }}
+          onApply={filter => { setCurrentPage(1); setDeals([]); columnFilters.setFilter(columnFilters.openColumn, filter) }}
+          onClear={() => { setCurrentPage(1); setDeals([]); columnFilters.clearFilter(columnFilters.openColumn) }}
+          onClose={columnFilters.closeMenu} />
+      )}
 
       {/* Column Selector Modal */}
       {isColumnSelectorOpen && (
