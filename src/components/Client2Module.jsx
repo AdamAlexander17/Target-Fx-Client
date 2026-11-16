@@ -132,7 +132,8 @@ const fetchClient2Results = async (searchClients, params, filters, signal, isCur
   const seen = new Set()
   let page = collectAll ? 1 : params.page
   while (isCurrent() && !signal.aborted) {
-    const response = await searchClients({ ...params, page }, { signal, timeout: 15000 })
+    // Client2Page's paged export already uses 1000. Leave visible pages alone.
+    const response = await searchClients({ ...params, page, limit: collectAll ? 500 : params.limit }, { signal, timeout: 15000 })
     if (!isCurrent() || signal.aborted) return null
     const data = response?.data?.data ?? response?.data ?? response
     if (!Array.isArray(data?.clients) || data.clients.some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
@@ -490,15 +491,10 @@ export default function Client2Module() {
       }
       abortControllerRef.current = new AbortController()
 
-      // Run API call and minimum skeleton timer in parallel (initial load only)
-      const minTimer = isInitialLoad ? new Promise(r => setTimeout(r, 600)) : Promise.resolve()
       const signal = abortControllerRef.current.signal
       const isCurrent = () => currentRequestId === requestIdRef.current && latestResultKeyRef.current === clientResultKey
-      const [data] = await Promise.all([
-        fetchClient2Results((query, options) => brokerAPI.searchClients(query, options), payload,
-          columnFilters.filters, signal, isCurrent),
-        minTimer
-      ])
+      const data = await fetchClient2Results((query, options) => brokerAPI.searchClients(query, options), payload,
+        columnFilters.filters, signal, isCurrent)
 
       // Ignore response if it's from an outdated request (stale data)
       // Do NOT clear isLoading here — the newer request owns the loading state

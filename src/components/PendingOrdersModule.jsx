@@ -166,14 +166,15 @@ export default function PendingOrdersModule() {
   const [hasFetchedOrders, setHasFetchedOrders] = useState(false)
   const [serverResultKey, setServerResultKey] = useState(null)
   const hasColumnFilters = Object.keys(columnFilters.filters).length > 0
+  const requestPage = hasColumnFilters ? 1 : currentPage
+  const getGroupLoginsRef = useRef(getGroupLogins)
+  getGroupLoginsRef.current = getGroupLogins
   // A changed query must never render the previous unfiltered server page,
   // including the render before the polling effect has a chance to run.
   const orderResultKey = JSON.stringify([columnFilters.filters, searchInput, filters,
     activeGroupFilters, groups, sortColumn, sortDirection, hasColumnFilters ? null : currentPage])
   const hasCurrentServerOrders = hasFetchedOrders && serverResultKey === orderResultKey
   const [isInitialLoading, setIsInitialLoading] = useState(true)
-  const initialLoadDoneRef = useRef(false)
-  const minTimerDoneRef = useRef(false)
   const [visibleColumns, setVisibleColumns] = useState({
     login: true,
     timeSetup: true,
@@ -222,15 +223,6 @@ export default function PendingOrdersModule() {
     setFilters({ hasFloating: false, hasCredit: false, noDeposit: false })
     setActiveGroupFilter('pendingorders', null)
     setSearchInput('')
-  }, [])
-
-  // Minimum 600ms skeleton on initial load
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      minTimerDoneRef.current = true
-      if (initialLoadDoneRef.current) setIsInitialLoading(false)
-    }, 600)
-    return () => clearTimeout(timer)
   }, [])
 
   // Reset pagination when active group changes
@@ -308,7 +300,7 @@ export default function PendingOrdersModule() {
       if (selectedClientRef.current) { if (!isCancelled && isCurrent()) timer = setTimeout(poll, 2000); return }
       try {
         const params = {
-          page: currentPage,
+          page: requestPage,
           limit: itemsPerPage,
           sortBy: sortColumn || 'timeSetup',
           sortOrder: sortDirection || 'desc'
@@ -319,7 +311,7 @@ export default function PendingOrdersModule() {
         // Apply active group filter as a server-side login filter (works across pages)
         const activeGroupName = getActiveGroupFilter('pendingorders')
         if (activeGroupName) {
-          const groupLogins = getGroupLogins(activeGroupName).map(l => Number(l)).filter(n => !Number.isNaN(n))
+          const groupLogins = getGroupLoginsRef.current(activeGroupName).map(l => Number(l)).filter(n => !Number.isNaN(n))
           apiFilters.push({ field: 'login', operator: 'in', value: groupLogins.length > 0 ? groupLogins : [-1] })
         }
         if (apiFilters.length) params.filters = apiFilters
@@ -344,17 +336,13 @@ export default function PendingOrdersModule() {
             hasFetchedServerTotalsRef.current = true
           }
           setHasFetchedOrders(true)
-          if (!initialLoadDoneRef.current) {
-            initialLoadDoneRef.current = true
-            if (minTimerDoneRef.current) setIsInitialLoading(false)
-          }
+          setIsInitialLoading(false)
         }
       } catch (err) {
         if ((!isCancelled && isCurrent()) && err?.code !== 'ERR_CANCELED' && err?.message !== 'canceled') {
           console.warn('[PendingOrdersModule] Polling error:', err?.message)
           // Allow the filtered WS cache to render when the API is unavailable.
-          initialLoadDoneRef.current = true
-          if (minTimerDoneRef.current) setIsInitialLoading(false)
+          setIsInitialLoading(false)
         }
       }
       if (!isCancelled && isCurrent()) timer = setTimeout(poll, 2000)
@@ -373,7 +361,7 @@ export default function PendingOrdersModule() {
       if (timer) { clearTimeout(timer); timer = null }
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [currentPage, itemsPerPage, sortColumn, sortDirection, searchInput, activeGroupFilters, getActiveGroupFilter, getGroupLogins, groups, columnFilters.filters, orderResultKey])
+  }, [requestPage, itemsPerPage, sortColumn, sortDirection, searchInput, activeGroupFilters, getActiveGroupFilter, groups, columnFilters.filters, orderResultKey])
 
   const handlePageChange = (nextPage, maxPage) => {
     const safeMaxPage = Math.max(1, maxPage)

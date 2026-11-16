@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from . import agent, alerts, brokereye, locks, scheduler, store, stt, tools, uploads
 from .config import settings
+from .bill_downloads import create_router as _bill_download_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("brokereye_ai")
@@ -124,6 +125,9 @@ def get_session(authorization: str = Header(default="")) -> brokereye.Session:
         raise HTTPException(401, str(e))
     except brokereye.BrokerEyeError as e:
         raise HTTPException(502, f"BrokerEye unavailable: {e}")
+
+
+app.include_router(_bill_download_router(get_session))
 
 
 # ---------------------------------------------------------------------------

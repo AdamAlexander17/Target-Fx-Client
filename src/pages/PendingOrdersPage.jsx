@@ -20,7 +20,7 @@ import { formatTime as apiFormatTime, fromServerEpoch, toServerEpoch } from '../
 
 const PendingOrdersPage = () => {
   // Detect mobile device
-  const [isMobile, setIsMobile] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
 
   // Use cached data from DataContext - MUST be called before conditional return
   const { orders: cachedOrders, fetchOrders } = useData()
@@ -395,8 +395,12 @@ const PendingOrdersPage = () => {
 
   // REST polling with server-side search, sort, filter, pagination
   useEffect(() => {
+    // The mobile module owns its requests; resume desktop polling on resize.
+    if (isMobile) return
+
     let timer = null
     let isCancelled = false
+    const controller = new AbortController()
 
     const requestGate = createLatestRequest()
     const poll = async () => {
@@ -461,7 +465,7 @@ const PendingOrdersPage = () => {
           params.filters = apiFilters
         }
 
-        const response = await brokerAPI.searchOrders(params)
+        const response = await brokerAPI.searchOrders(params, { signal: controller.signal })
         if (isCancelled || !isCurrent()) return
         const data = response?.data?.orders || response?.data?.positions || response?.orders || []
         const total = response?.data?.total || response?.total || 0
@@ -500,10 +504,11 @@ const PendingOrdersPage = () => {
 
     return () => {
       isCancelled = true
+      controller.abort()
       if (timer) { clearTimeout(timer); timer = null }
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [currentPage, itemsPerPage, sortColumn, sortDirection, activeSearch, columnFilters, selectedLogin, activeGroupFilters, getActiveGroupFilter, getGroupLogins])
+  }, [isMobile, currentPage, itemsPerPage, sortColumn, sortDirection, activeSearch, columnFilters, selectedLogin, activeGroupFilters, getActiveGroupFilter, getGroupLogins])
 
   // Helper to get order id
   const getOrderId = (order) => {

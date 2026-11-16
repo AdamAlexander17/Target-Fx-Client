@@ -21,6 +21,8 @@ import ClientPositionsModal from '../components/ClientPositionsModal'
 import ClientDetailsMobileModal from '../components/ClientDetailsMobileModal'
 import { useGroups } from '../contexts/groupContextStore'
 import { formatDate } from '../utils/dateFormatter'
+import { createBillDownloadBatch } from '../utils/billDownloads'
+import BillDownloadDialog from '../components/BillDownloadDialog'
 
 const fmtMoney = (n) => {
   const num = Number(n)
@@ -272,24 +274,6 @@ const buildBillsPdf = (bills = []) => {
   return doc
 }
 
-const savePdf = (doc, filename) => {
-  try {
-    const blob = doc.output('blob')
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.rel = 'noopener'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-  } catch (e) {
-    console.error('[Bills] savePdf failed, falling back to doc.save', e)
-    try { doc.save(filename) } catch (err) { console.error('[Bills] doc.save also failed', err) }
-  }
-}
-
 // Flatten Bills API response into rows: { Login, Name, Symbol, Side, Datetime, Price, Quantity, PnL, Brokerage }
 
 
@@ -405,6 +389,7 @@ const BillsPage = () => {
   const [selectedClient, setSelectedClient] = useState(null)
   const [bulkDownloading, setBulkDownloading] = useState(false)
   const [exportingAll, setExportingAll] = useState(false)
+  const [downloadFiles, setDownloadFiles] = useState(null)
   const [selectedMenuOpen, setSelectedMenuOpen] = useState(false)
   const [allMenuOpen, setAllMenuOpen] = useState(false)
   const [visibleColumns, setVisibleColumns] = useState({ login: true, name: true, brokerage: true, gross: true, net: true, actions: true })
@@ -671,17 +656,19 @@ const BillsPage = () => {
     if (!selectedWeekId) return
     try {
       setBusyLogin(login)
+      const downloads = createBillDownloadBatch(setDownloadFiles)
       const res = await brokerAPI.getBillsDetails(selectedWeekId, [login])
       const data = res?.data ?? res
       const bills = data?.Bills ?? data?.bills ?? []
+      if (!bills.length) throw new Error('No bill data was returned for this login')
       const row = rows.find(r => r.Login === login)
       const safeName = String(row?.Name || login).replace(/[^a-z0-9\-_ ]/gi, '_').trim()
       const wk = selectedWeek?.name?.replace(/[^a-z0-9\-_ ]/gi, '_').trim() || `week-${selectedWeekId}`
       const doc = buildBillsPdf(bills, selectedWeek)
-      savePdf(doc, `bill_${login}_${safeName}_${wk}.pdf`)
+      await downloads.add(doc.output('blob'), `bill_${login}_${safeName}_${wk}.pdf`)
+      downloads.finish()
     } catch (err) {
-      console.error('[Bills] download failed:', err)
-      alert(err?.response?.data?.message || 'Failed to download bill')
+      alert(err?.response?.data?.message || err.message || 'Failed to download bill')
     } finally {
       setBusyLogin(null)
     }
@@ -693,6 +680,7 @@ const BillsPage = () => {
     if (!selectedWeekId || selected.size === 0) return
     try {
       setBulkDownloading(true)
+      const downloads = createBillDownloadBatch(setDownloadFiles)
       const logins = Array.from(selected)
       const wk = selectedWeek?.name?.replace(/[^a-z0-9\-_ ]/gi, '_').trim() || `week-${selectedWeekId}`
       const nameByLogin = new Map(rows.map(r => [String(r.Login), r.Name]))
@@ -716,9 +704,7 @@ const BillsPage = () => {
             const blob = doc.output('blob')
             zip.file(filename, blob)
           } else {
-            savePdf(doc, filename)
-            // Small delay so the browser doesn't block successive downloads
-            await new Promise(r => setTimeout(r, 150))
+            await downloads.add(doc.output('blob'), filename)
           }
           savedCount++
         }
@@ -729,28 +715,22 @@ const BillsPage = () => {
       }
       if (zip) {
         const blob = await zip.generateAsync({ type: 'blob' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `bills_${wk}.zip`
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        URL.revokeObjectURL(url)
+        await downloads.add(blob, `bills_${wk}.zip`)
       }
+      downloads.finish()
     } catch (err) {
-      console.error('[Bills] bulk download failed:', err)
-      alert(err?.response?.data?.message || 'Failed to download selected bills')
+      alert(err?.response?.data?.message || err.message || 'Failed to download selected bills')
     } finally {
       setBulkDownloading(false)
     }
   }
 
-  // Download ALL bills (PDF) for the entire week — chunked; 'individual' → combined PDF, 'zip' → .zip
+  // Download ALL filtered bills — chunked; 'individual' → one PDF per login, 'zip' → .zip
   const exportAll = async (mode = 'individual') => {
     if (!selectedWeekId) return
     try {
       setExportingAll(true)
+      const downloads = createBillDownloadBatch(setDownloadFiles)
       // We already know the total from the table's last summary fetch — no need to
       // probe the API again. Just request the full page (or reuse current rows if
       // they already cover the whole result set).
@@ -803,9 +783,7 @@ const BillsPage = () => {
             const blob = doc.output('blob')
             zip.file(filename, blob)
           } else {
-            savePdf(doc, filename)
-            // Small delay so the browser doesn't block successive downloads
-            await new Promise(r => setTimeout(r, 150))
+            await downloads.add(doc.output('blob'), filename)
           }
           savedCount++
         }
@@ -816,18 +794,11 @@ const BillsPage = () => {
       }
       if (zip) {
         const blob = await zip.generateAsync({ type: 'blob' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `bills_all_${wk}.zip`
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        URL.revokeObjectURL(url)
+        await downloads.add(blob, `bills_all_${wk}.zip`)
       }
+      downloads.finish()
     } catch (err) {
-      console.error('[Bills] export all failed:', err)
-      alert(err?.response?.data?.message || 'Failed to export all bills')
+      alert(err?.response?.data?.message || err.message || 'Failed to export all bills')
     } finally {
       setExportingAll(false)
     }
@@ -843,6 +814,7 @@ const BillsPage = () => {
 
   return (
     <div className="report-viewport flex bg-gray-50 max-sm:bg-white">
+      {downloadFiles && <BillDownloadDialog files={downloadFiles} onClose={() => setDownloadFiles(null)} />}
       {(bulkDownloading || exportingAll) && (
         <LoadingSpinner
           message={exportingAll ? 'Exporting all bills…' : 'Downloading selected bills…'}

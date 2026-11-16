@@ -36,7 +36,7 @@ test('loads server-capped pages before filtering and preserves sorting/login par
   }, { page: 9, page_size: 15, login: '90', sort_by: 'login', sort_order: 'desc' }, () => true)
   assert.equal(requests.length, 2)
   assert.deepEqual(requests.map(request => request.page), [1, 2])
-  assert.ok(requests.every(request => request.limit === 100 && request.page_size === undefined && request.login === '90' && request.sort_order === 'desc'))
+  assert.ok(requests.every(request => request.limit === 500 && request.page_size === undefined && request.login === '90' && request.sort_order === 'desc'))
   assert.equal(payload.default_percentage, 20)
   assert.deepEqual(filterPercentageTypes(payload.clients, ['Auto']), rows.slice(2))
 })

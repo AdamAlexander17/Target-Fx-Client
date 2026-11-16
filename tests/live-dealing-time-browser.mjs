@@ -193,9 +193,12 @@ try {
     assert.equal(body.filters, undefined, 'No unsupported Time condition sent')
   }
   assert.ok([1, 2, 3, 4, 5, 6, 7].every(page => filteredCalls.some(call => call.body.page === page)), 'All seven server-capped pages collected')
+  assert.equal(filteredCalls.find(call => call.body.page === 1).body.limit, 500, 'Complete scan starts at verified larger batch size')
+  const beforeLocalPage = dealCalls().length
   await click(`${pageInput}.parentElement.nextElementSibling`)
   await waitFor(`${pageInput}.value === '2' && ${bodyRows}.length === 2`)
   assert.deepEqual(await evaluate(logins), fixtures.slice(15, 17).map(row => row.login))
+  assert.equal(dealCalls().length, beforeLocalPage, 'Local page change does not restart a candidate scan')
   console.log('PASS real mobile /live-dealing Equal 12/11/2026 17:06:16: 17 matches across seven API pages; 15+2 local pages; original period retained')
 
   // Hold one query, apply a newer query, then release the obsolete response last.
@@ -215,7 +218,9 @@ try {
   await waitFor(`${bodyRows}.length === 1 && ${bodyRows}[0].textContent.includes('810018')`)
   for (const fulfill of held.splice(0)) await fulfill().catch(() => {})
   const pollStart = dealCalls().length
-  for (let i = 0; i < 100 && dealCalls().length === pollStart; i++) await delay(30)
+  await delay(2500)
+  assert.equal(dealCalls().length, pollStart, 'Complete scans no longer repeat every two seconds')
+  for (let i = 0; i < 400 && dealCalls().length === pollStart; i++) await delay(30)
   assert.ok(dealCalls().length > pollStart, 'Polling continues with latest condition')
   await waitFor(`${bodyRows}.length === 1 && ${bodyRows}[0].textContent.includes('810018')`)
   assert.deepEqual(await evaluate(times), ['12/11/2026 17:06:17'])

@@ -79,6 +79,8 @@ const fetchPositionResults = async (searchPositions, params, filters, signal, is
   // possibly unsupported field/operator, timezone or subsecond semantics.
   // Retain base period/search/group constraints on every candidate page.
   const candidateParams = { ...params }
+  // searchPositions exports already request 1000; only complete scans use 500.
+  if (collectAll) candidateParams.limit = 500
   if (collectAll && params.filters) {
     candidateParams.filters = params.filters.filter(filter => !['timeUpdate', 'timeCreate', 'updated'].includes(filter.field))
     if (!candidateParams.filters.length) delete candidateParams.filters
@@ -258,6 +260,9 @@ export default function PositionModule() {
   const [hasFetchedServerPositions, setHasFetchedServerPositions] = useState(false)
   const [serverPositionsResultKey, setServerPositionsResultKey] = useState(null)
   const hasRegularColumnFilters = Object.keys(positionColumns.filters).length > 0
+  const requestPage = hasRegularColumnFilters ? 1 : currentPage
+  const getGroupLoginsRef = useRef(getGroupLogins)
+  getGroupLoginsRef.current = getGroupLogins
   // Exclude the local page for collected results; never reuse an old query's
   // page or totals, even on the render before effect cleanup runs.
   const regularResultKey = JSON.stringify([positionColumns.filters, debouncedSearch, filters,
@@ -267,8 +272,6 @@ export default function PositionModule() {
   const hasFetchedServerPositionsRef = useRef(false)
   const [, setIsServerPositionsLoading] = useState(false)
   const [isInitialLoading, setIsInitialLoading] = useState(true)
-  const initialLoadDoneRef = useRef(false)
-  const minTimerDoneRef = useRef(false)
 
   const [visibleColumns, setVisibleColumns] = useState({
     login: true,
@@ -306,15 +309,6 @@ export default function PositionModule() {
     setFilters({ hasFloating: false, hasCredit: false, noDeposit: false })
     setActiveGroupFilter('positions', null)
     setSearchInput('')
-  }, [])
-
-  // Minimum 600ms skeleton on initial load
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      minTimerDoneRef.current = true
-      if (initialLoadDoneRef.current) setIsInitialLoading(false)
-    }, 600)
-    return () => clearTimeout(timer)
   }, [])
 
   // Reset pagination when active group changes
@@ -451,7 +445,7 @@ export default function PositionModule() {
       try {
         if (!hasFetchedServerPositionsRef.current) setIsServerPositionsLoading(true)
         const params = {
-          page: currentPage,
+          page: requestPage,
           limit: itemsPerPage,
           sortBy: POSITION_FIELD_ALIASES[sortColumn] || sortColumn || 'timeCreate',
           sortOrder: sortDirection || 'desc'
@@ -468,7 +462,7 @@ export default function PositionModule() {
         const apiFilters = [...regularRequestFilters]
         const activeGroupName = getActiveGroupFilter('positions')
         if (activeGroupName) {
-          const groupLogins = getGroupLogins(activeGroupName).map(l => Number(l)).filter(n => !Number.isNaN(n))
+          const groupLogins = getGroupLoginsRef.current(activeGroupName).map(l => Number(l)).filter(n => !Number.isNaN(n))
           apiFilters.push({ field: 'login', operator: 'in', value: groupLogins.length > 0 ? groupLogins : [-1] })
         }
         if (apiFilters.length) params.filters = apiFilters
@@ -494,18 +488,14 @@ export default function PositionModule() {
           setHasFetchedServerPositions(true)
           hasFetchedServerPositionsRef.current = true
           setIsServerPositionsLoading(false)
-          if (!initialLoadDoneRef.current) {
-            initialLoadDoneRef.current = true
-            if (minTimerDoneRef.current) setIsInitialLoading(false)
-          }
+          setIsInitialLoading(false)
         }
       } catch (err) {
         if ((!isCancelled && isCurrent()) && err?.code !== 'ERR_CANCELED' && err?.message !== 'canceled') {
           console.warn('[PositionModule] Regular poll error:', err?.message)
           setServerPositionsResultKey(null)
           setIsServerPositionsLoading(false)
-          initialLoadDoneRef.current = true
-          if (minTimerDoneRef.current) setIsInitialLoading(false)
+          setIsInitialLoading(false)
         }
       }
       if (!isCancelled && isCurrent()) timer = setTimeout(poll, 2000)
@@ -524,7 +514,7 @@ export default function PositionModule() {
       if (timer) { clearTimeout(timer); timer = null }
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [showClientNet, showExchangeView, currentPage, itemsPerPage, sortColumn, sortDirection, debouncedSearch, displayMode, dateFilter, activeGroupFilters, getActiveGroupFilter, getGroupLogins, regularRequestFilters, positionColumns.filters, regularResultKey])
+  }, [showClientNet, showExchangeView, requestPage, itemsPerPage, sortColumn, sortDirection, debouncedSearch, displayMode, dateFilter, activeGroupFilters, getActiveGroupFilter, regularRequestFilters, positionColumns.filters, regularResultKey])
 
   const normalizeNetTypeLabel = (action) => {
     if (action === 'BUY') return 'Buy'

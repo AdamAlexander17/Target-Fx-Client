@@ -21,7 +21,7 @@ import ColumnFilterTrigger from './ColumnFilterTrigger'
 import AutoPercentageModal from './AutoPercentageModal'
 import { useGroups } from '../contexts/groupContextStore'
 import { applyCumulativeFilters } from '../utils/mobileFilters'
-import { getPercentageType, filterPercentageTypes, loadPercentageClients, PERCENTAGE_TYPES } from '../utils/percentageType'
+import { getPercentageType, filterPercentageTypes, createPercentageLoader, loadPercentageClients, PERCENTAGE_TYPES } from '../utils/percentageType'
 import { createLatestRequest } from '../utils/latestRequest'
 import { formatDate, formatTime } from '../utils/dateFormatter'
 import { filterRowsByColumnFilters, sortRowsByColumn } from '../utils/columnFilters'
@@ -53,7 +53,8 @@ const percentageColumnValue = (item, key) => {
 
 export default function ClientPercentageModule() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
+  const [unauthorized, setUnauthorized] = useState(false)
   const canSetPercentage = user?.rights ? user.rights.includes('set_percentage') : true
   const { positions: cachedPositions, clients: cachedClients, rawClients, orders } = useData()
   const { groups, deleteGroup, getActiveGroupFilter, setActiveGroupFilter, filterByActiveGroup, activeGroupFilters } = useGroups()
@@ -67,6 +68,8 @@ export default function ClientPercentageModule() {
   const [columnFilterRect, setColumnFilterRect] = useState(null)
   const columnFilterRefs = useRef({})
   const percentageRequests = useRef(createLatestRequest())
+  const percentageLoader = useRef(createPercentageLoader(brokerAPI.getAllClientPercentages))
+  const displayedQuery = useRef(null)
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
 
@@ -162,7 +165,7 @@ export default function ClientPercentageModule() {
   // API State
   const [clients, setClients] = useState([])
   const [allClients, setAllClients] = useState([]) // full dataset for group filtering
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [stats, setStats] = useState({
     total: 0,
@@ -218,18 +221,21 @@ export default function ClientPercentageModule() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const fetchAllClientPercentages = useCallback(async (page = 1) => {
+  const fetchAllClientPercentages = useCallback(async (page = 1, force = true) => {
+    if (!isAuthenticated || unauthorized) return
     const isCurrent = percentageRequests.current.start()
     try {
-      setLoading(true)
       setError('')
 
       // Server-side pagination for both views
       // Some backends use `limit` instead of `page_size` for this endpoint
       const params = isMobileView ? { page, limit: 15 } : { page, limit: 100 }
-      const response = useLocalFiltering
-        ? await loadPercentageClients(brokerAPI.getAllClientPercentages, { ...params, sort_by: 'login', sort_order: 'asc' }, isCurrent)
-        : await brokerAPI.getAllClientPercentages(params)
+      const requestParams = { ...params, page: useLocalFiltering ? 1 : page, sort_by: 'login', sort_order: 'asc' }
+      const key = JSON.stringify([useLocalFiltering, requestParams])
+      const matching = displayedQuery.current?.key === key && displayedQuery.current?.user === user
+      setLoading(!matching)
+      if (!matching) setClients([])
+      const response = await percentageLoader.current.load(requestParams, useLocalFiltering, user, force)
       if (!isCurrent()) return
 
       // Normalize nested API shape: response.data?.data
@@ -238,8 +244,9 @@ export default function ClientPercentageModule() {
         console.log('[ClientPercentage] fetch', { page, params, parsedTotal: payload?.total, count: Array.isArray(payload?.clients) ? payload.clients.length : 0 })
       } catch { /* Retain the fallback when this operation is unavailable. */ }
       const clientsData = payload?.clients || []
+      displayedQuery.current = { key, user }
       setClients(clientsData)
-      if (useLocalFiltering) setAllClients(clientsData)
+      setAllClients(clientsData)
       setStats(prev => ({
         total: Number(payload?.total ?? clientsData.length),
         total_custom: Number(payload?.total_custom ?? prev.total_custom),
@@ -251,11 +258,39 @@ export default function ClientPercentageModule() {
       if (!isCurrent()) return
       console.error('Error fetching client percentages:', err)
       setError('Failed to load client percentages')
-      if (useLocalFiltering) setClients([])
+      if (err?.response?.status === 401) {
+        percentageLoader.current.clear()
+        displayedQuery.current = null
+        setClients([])
+        setAllClients([])
+        setUnauthorized(true)
+      }
     } finally {
       if (isCurrent()) setLoading(false)
     }
-  }, [isMobileView, useLocalFiltering])
+  }, [isMobileView, useLocalFiltering, isAuthenticated, unauthorized, user])
+
+  useEffect(() => {
+    const loader = percentageLoader.current
+    const onLogout = () => {
+      percentageRequests.current.invalidate()
+      percentageLoader.current.clear()
+      displayedQuery.current = null
+      setClients([])
+      setAllClients([])
+      setUnauthorized(true)
+    }
+    const onLogin = () => setUnauthorized(false)
+    window.addEventListener('auth:logout', onLogout)
+    window.addEventListener('auth:login', onLogin)
+    window.addEventListener('auth:token_refreshed', onLogin)
+    return () => {
+      loader.clear()
+      window.removeEventListener('auth:logout', onLogout)
+      window.removeEventListener('auth:login', onLogin)
+      window.removeEventListener('auth:token_refreshed', onLogin)
+    }
+  }, [])
 
   // Handle edit click
   const handleEditClick = (client) => {
@@ -265,6 +300,7 @@ export default function ClientPercentageModule() {
 
   // Handle edit success
   const handleEditSuccess = async () => {
+    percentageLoader.current.clear()
     await fetchAllClientPercentages(currentPage)
     setShowEditModal(false)
     setSelectedClient(null)
@@ -272,13 +308,13 @@ export default function ClientPercentageModule() {
 
   // Apply cumulative filters: Customize View -> IB -> Group
   const ibFilteredData = useMemo(() => {
-    return applyCumulativeFilters(clients, {
+    return applyCumulativeFilters(isAuthenticated && !unauthorized && displayedQuery.current?.user === user ? clients : [], {
       customizeFilters: filters,
       filterByActiveGroup,
       loginField: 'client_login',
       moduleName: 'clientpercentage'
     })
-  }, [clients, filters, filterByActiveGroup, activeGroupFilters])
+  }, [clients, filters, filterByActiveGroup, activeGroupFilters, isAuthenticated, unauthorized, user])
 
   // Calculate summary statistics
 
@@ -375,7 +411,7 @@ export default function ClientPercentageModule() {
   // Page through the API only in unfiltered mode; local queries load a complete snapshot.
   useEffect(() => {
     const requests = percentageRequests.current
-    fetchAllClientPercentages(serverPage)
+    fetchAllClientPercentages(serverPage, false)
     return () => requests.invalidate()
   }, [serverPage, fetchAllClientPercentages])
 
@@ -541,6 +577,7 @@ export default function ClientPercentageModule() {
         comment: bulkComment || `Bulk update: ${percentage}%`
       }))
       await brokerAPI.bulkUpdateClientPercentages(clientsToUpdate)
+      percentageLoader.current.clear()
       await fetchAllClientPercentages(currentPage)
       setShowBulkModal(false)
       setSelectedRows(new Set())
@@ -602,6 +639,7 @@ export default function ClientPercentageModule() {
         const batch = csvData.slice(i, i + BATCH_SIZE)
         await brokerAPI.bulkUpdateClientPercentages(batch)
       }
+      percentageLoader.current.clear()
       await fetchAllClientPercentages(currentPage)
       setShowImportModal(false)
       setCsvData([])
@@ -666,31 +704,19 @@ export default function ClientPercentageModule() {
       downloadCSV(buildCSV(rows), `client_percentage_${mode}_${new Date().toISOString().split('T')[0]}.csv`)
       return
     }
+    if (mode === 'selected') {
+      const rows = filteredData.filter(row => selectedRows.has(row.client_login) || selectedRows.has(row.login))
+      if (!rows.length) { alert('No rows selected in loaded data'); return }
+      downloadCSV(buildCSV(rows), `client_percentage_selected_${new Date().toISOString().split('T')[0]}.csv`)
+      return
+    }
     try {
       setExporting(true)
       setExportProgress(0)
-      const PARALLEL = 8
-      const PAGE_SIZE = 1000
-      const probe = await brokerAPI.getAllClientPercentages({ page: 1, page_size: PAGE_SIZE, sort_by: sortColumn || 'login', sort_order: sortDirection })
-      const probeClients = Array.isArray(probe.data?.clients) ? probe.data.clients : []
-      const total = Number(probe.data?.total || 0)
-      if (!total) { alert('No data to export'); return }
-      if (!probeClients.length) { alert('No data returned from server'); return }
-      const byLogin = new Map()
-      const addRows = (list) => { for (const c of (list || [])) { const k = c?.client_login ?? c?.login; if (k != null && !byLogin.has(k)) byLogin.set(k, c) } }
-      addRows(probeClients)
-      const totalPages = Math.max(1, Math.ceil(total / probeClients.length))
-      let done = 1
-      for (let page = 2; page <= totalPages; page += PARALLEL) {
-        const batch = []
-        for (let i = 0; i < PARALLEL && (page + i) <= totalPages; i++) batch.push(page + i)
-        const results = await Promise.all(batch.map(p => brokerAPI.getAllClientPercentages({ page: p, page_size: PAGE_SIZE, sort_by: sortColumn || 'login', sort_order: sortDirection }).then(r => Array.isArray(r.data?.clients) ? r.data.clients : []).catch(() => [])))
-        results.forEach(list => addRows(list))
-        done += batch.length
-        setExportProgress(Math.min(done / totalPages, 1))
-      }
-      const allRows = Array.from(byLogin.values())
-      const finalRows = mode === 'selected' ? allRows.filter(c => selectedRows.has(c.client_login) || selectedRows.has(c.login)) : allRows
+      const owner = user
+      const { clients: finalRows } = await loadPercentageClients(brokerAPI.getAllClientPercentages,
+        { sort_by: 'login', sort_order: sortDirection }, () => displayedQuery.current?.user === owner)
+      setExportProgress(1)
       if (!finalRows.length) { alert('No data to export'); return }
       const csv = buildCSV(finalRows)
       downloadCSV(csv, `client_percentage_${mode}_${new Date().toISOString().split('T')[0]}.csv`)
@@ -1322,7 +1348,7 @@ export default function ClientPercentageModule() {
       <AutoPercentageModal
         isOpen={showAutoPercentageModal}
         onClose={() => setShowAutoPercentageModal(false)}
-        onChanged={() => { fetchAllClientPercentages(currentPage) }}
+        onChanged={() => { percentageLoader.current.clear(); fetchAllClientPercentages(serverPage) }}
       />
 
       {/* Bulk Update Modal */}

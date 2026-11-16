@@ -271,40 +271,74 @@ const AppContent = () => {
   )
 }
 
-// Preloads lazy routes after initial render to make navigation snappy
+// Warm route code only; each page still owns its data fetching and loading state.
 function PreloadRoutes() {
+  const { isAuthenticated, initializing } = useAuth()
+
   useEffect(() => {
-    const preload = () => {
+    if (!isAuthenticated || initializing) return
+
+    const canPrefetch = () => {
+      const connection = navigator.connection
+      return !connection?.saveData && !['slow-2g', '2g'].includes(connection?.effectiveType)
+    }
+    if (!canPrefetch()) return
+
+    // Common trading screens first, less frequent screens later. Import functions
+    // stay deferred: only one speculative route import runs at a time.
+    const queue = [
+      () => import('./pages/Client2Page'),
+      () => import('./pages/PositionsPage'),
+      () => import('./pages/PendingOrdersPage'),
+      () => import('./pages/LiveDealingPage'),
+      () => import('./pages/MarginLevelPage'),
+      () => import('./pages/ClientPercentagePage'),
+      () => import('./pages/BillsPage'),
+      () => import('./pages/ReportsExchangePage'),
+      () => import('./pages/DealsReportPage'),
+      () => import('./pages/HistoricalPositionsPage'),
+      () => import('./pages/SummaryReportPage'),
+      () => import('./pages/AskAIPage'),
+      () => import('./pages/BrokerRulePage'),
+      () => import('./pages/SettingsPage'),
+      () => import('./pages/TutorialsPage'),
+      () => import('./pages/BrokerageCalculatorPage'),
+      () => import('./pages/GraphicalAnalyticsPage'),
+      () => import('./pages/ClientDashboardDesignC'),
+    ]
+    let cancelled = false
+    let next = 0
+    let idleId = null
+    let timerId = null
+
+    const scheduleNext = () => {
+      if (cancelled || next >= queue.length || !canPrefetch()) return
+      if (typeof window.requestIdleCallback === 'function' && typeof window.cancelIdleCallback === 'function') {
+        idleId = window.requestIdleCallback(preloadNext, { timeout: 2000 })
+      } else {
+        timerId = window.setTimeout(preloadNext, 1200)
+      }
+    }
+
+    const preloadNext = async () => {
+      idleId = null
+      timerId = null
+      if (cancelled || !canPrefetch()) return
       try {
-        // Preload commonly navigated pages
-        import('./pages/Client2Page')
-        import('./pages/AskAIPage')
-        import('./pages/PendingOrdersPage')
-        import('./pages/MarginLevelPage')
-        import('./pages/LiveDealingPage')
-        import('./pages/ClientPercentagePage')
-        import('./pages/BillsPage')
-        import('./pages/ReportsExchangePage')
-        import('./pages/HistoricalPositionsPage')
-        import('./pages/DealsReportPage')
-        import('./pages/SummaryReportPage')
-        import('./pages/BrokerRulePage')
-        import('./pages/SettingsPage')
-        import('./pages/TutorialsPage')
-        import('./pages/BrokerageCalculatorPage')
-        import('./pages/GraphicalAnalyticsPage')
-        import('./pages/ClientDashboardDesignC')
-      } catch { /* Retain the fallback when this operation is unavailable. */ }
+        await queue[next++]()
+      } catch { /* Best effort only; normal route navigation retains its loading/error behavior. */ }
+      scheduleNext()
     }
-    if ('requestIdleCallback' in window) {
-      // Prefer idle time so we don't impact interactivity
-      window.requestIdleCallback(preload, { timeout: 2000 })
-    } else {
-      // Fallback to a short delay
-      const t = setTimeout(preload, 1200)
-      return () => clearTimeout(t)
+
+    scheduleNext()
+    return () => {
+      // Dynamic imports already in flight cannot be aborted, but must not start
+      // any more work after logout or unmount (including StrictMode cleanup).
+      cancelled = true
+      if (idleId !== null) window.cancelIdleCallback(idleId)
+      if (timerId !== null) window.clearTimeout(timerId)
     }
-  }, [])
+  }, [isAuthenticated, initializing])
   return null
 }
 

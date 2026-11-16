@@ -107,7 +107,7 @@ test('collect capped pages beyond page one, nested total, global sort and local 
     return { data: { deals: rows.slice((page - 1) * 7, page * 7), pagination: { total: rows.length } } }
   })
   assert.deepEqual(calls.map(c => c.page), [1, 2, 3, 4, 5, 6, 7])
-  assert.deepEqual(calls.map(c => c.limit), [15, 7, 7, 7, 7, 7, 7])
+  assert.deepEqual(calls.map(c => c.limit), [500, 7, 7, 7, 7, 7, 7])
   const matches = sortRowsByColumn(dealFilterRows(result.rows, equal), dealSortValue, 'deal', 'desc')
   assert.equal(matches.length, 17)
   assert.deepEqual(matches.slice(15, 30).map(r => r.deal), [2, 1])

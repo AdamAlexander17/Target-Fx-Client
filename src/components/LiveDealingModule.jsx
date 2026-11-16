@@ -67,6 +67,9 @@ const dealSortValue = (row, key) => dealFilterKind(key) === 'text' ? `text:${dea
 const fetchDealResults = async (getAllDeals, { from, to, extraBody }, collectAll, page, limit, signal, isCurrent) => {
   const rows = []
   const seen = new Set()
+  // The same endpoint already uses 1000 for export. Keep visible pages at 15,
+  // but start complete scans at 500 and retain the first-response cap handling.
+  if (collectAll) limit = 500
   let nextPage = collectAll ? 1 : page
   while (isCurrent() && !signal.aborted) {
     const response = await getAllDeals(from, to, limit, nextPage, extraBody, { signal })
@@ -436,11 +439,11 @@ export default function LiveDealingModule() {
     let timer
     const load = async (background = false) => {
       await fetchDeals(currentPageRef.current, controller.signal, background)
-      if (!controller.signal.aborted) timer = setTimeout(() => load(true), 2000)
+      if (!controller.signal.aborted) timer = setTimeout(() => load(true), hasColumnFilters ? 10000 : 2000)
     }
     load()
     return () => { controller.abort(); clearTimeout(timer); dealsRequestRef.current += 1 }
-  }, [fetchDeals])
+  }, [fetchDeals, hasColumnFilters])
 
   const hasColumnFiltersRef = useRef(hasColumnFilters)
   hasColumnFiltersRef.current = hasColumnFilters

@@ -19,13 +19,13 @@ import AutoPercentageModal from '../components/AutoPercentageModal'
 import ColumnChooserList from '../components/ColumnChooserList'
 import useColumnResize from '../hooks/useColumnResize.jsx'
 import { ColumnResizeHandle } from '../components/ColumnResizeHandle'
-import { getPercentageType, getPercentageTypeBadgeClass, filterPercentageTypes, percentageSearchType, loadPercentageClients } from '../utils/percentageType'
+import { getPercentageType, getPercentageTypeBadgeClass, filterPercentageTypes, percentageSearchType, createPercentageLoader } from '../utils/percentageType'
 import PercentageTypeFilter from '../components/PercentageTypeFilter'
 import { formatDate } from '../utils/dateFormatter'
 
 const ClientPercentagePage = () => {
   // Detect mobile device
-  const [isMobile, setIsMobile] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   // Global Compact / Full numeric display mode (synced with Sidebar via 'globalDisplayMode')
   const [numericMode, setNumericMode] = useState(() => {
     try {
@@ -62,7 +62,8 @@ const ClientPercentagePage = () => {
     return String(num)
   }
 
-  const { filterByActiveGroup } = useGroups()
+  const { filterByActiveGroup, getActiveGroupFilter, activeGroupFilters } = useGroups()
+  const activeGroup = getActiveGroupFilter('clientpercentage')
   useData()
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
@@ -98,9 +99,11 @@ const ClientPercentagePage = () => {
   const [searchInput, setSearchInput] = useState('')
   const [selectedTypes, setSelectedTypes] = useState([])
   const searchType = percentageSearchType(searchQuery)
-  const useLocalTypeFiltering = selectedTypes.length > 0 || searchType !== null
+  const useLocalTypeFiltering = selectedTypes.length > 0 || searchType !== null || Boolean(activeGroup)
   const serverPage = useLocalTypeFiltering ? 1 : currentPage
   const percentageRequests = useRef(createLatestRequest())
+  const percentageLoader = useRef(createPercentageLoader(brokerAPI.getAllClientPercentages))
+  const displayedQuery = useRef(null)
   useSearchAsYouType(searchInput, searchQuery, setSearchQuery, setCurrentPage)
   const searchRef = useRef(null)
 
@@ -251,8 +254,11 @@ const ClientPercentagePage = () => {
 
   // Critical: Set unmounted flag ASAP to unblock route transitions
   useEffect(() => {
+    isMountedRef.current = true
+    const loader = percentageLoader.current
     return () => {
       isMountedRef.current = false
+      loader.clear()
     }
   }, [])
 
@@ -260,14 +266,22 @@ const ClientPercentagePage = () => {
   useEffect(() => {
     const requests = percentageRequests.current
     const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
-    if (!isAuthenticated || unauthorized || hidden) return
-    fetchAllClientPercentages(serverPage)
+    if (isMobile || !isAuthenticated || unauthorized || hidden) return
+    fetchAllClientPercentages(serverPage, false)
     return () => requests.invalidate()
-  }, [searchQuery, sortColumn, sortDirection, serverPage, itemsPerPage, isAuthenticated, unauthorized, useLocalTypeFiltering])
+  }, [isMobile, searchQuery, sortColumn, sortDirection, serverPage, itemsPerPage, isAuthenticated, unauthorized, useLocalTypeFiltering, user])
+
+  useEffect(() => { setCurrentPage(1) }, [selectedTypes, searchType, activeGroupFilters])
 
   useEffect(() => {
     const onRefreshed = () => setUnauthorized(false)
-    const onLogout = () => setUnauthorized(true)
+    const onLogout = () => {
+      percentageRequests.current.invalidate()
+      percentageLoader.current.clear()
+      displayedQuery.current = null
+      setClients([])
+      setUnauthorized(true)
+    }
     window.addEventListener('auth:token_refreshed', onRefreshed)
     window.addEventListener('auth:logout', onLogout)
     return () => {
@@ -278,10 +292,10 @@ const ClientPercentagePage = () => {
 
   // No longer need click outside handler for suggestions
 
-  const fetchAllClientPercentages = async (page = 1) => {
+  const fetchAllClientPercentages = async (page = serverPage, force = true) => {
+    if (!isAuthenticated || unauthorized) return
     const isCurrent = percentageRequests.current.start()
     try {
-      setLoading(true)
       setError('')
 
       const params = { 
@@ -295,13 +309,16 @@ const ClientPercentagePage = () => {
         params.login = searchQuery.trim()
       }
 
-      const response = useLocalTypeFiltering
-        ? await loadPercentageClients(brokerAPI.getAllClientPercentages, params, isCurrent)
-        : await brokerAPI.getAllClientPercentages(params)
+      const key = JSON.stringify([useLocalTypeFiltering, { ...params, page: useLocalTypeFiltering ? 1 : page }])
+      const matching = displayedQuery.current?.key === key && displayedQuery.current?.user === user
+      setLoading(!matching)
+      if (!matching) setClients([])
+      const response = await percentageLoader.current.load(params, useLocalTypeFiltering, user, force)
       if (!isCurrent()) return
 
       const payload = response?.data?.data ?? response?.data ?? response ?? {}
       const clientsData = Array.isArray(payload.clients) ? payload.clients : []
+      displayedQuery.current = { key, user }
       setClients(clientsData)
       setStats({
         total: payload.total ?? clientsData.length,
@@ -314,8 +331,12 @@ const ClientPercentagePage = () => {
       if (!isCurrent()) return
       console.error('Error fetching client percentages:', err)
       setError('Failed to load client percentages')
-      if (useLocalTypeFiltering) setClients([])
-      if (err?.response?.status === 401) setUnauthorized(true)
+      if (err?.response?.status === 401) {
+        percentageLoader.current.clear()
+        displayedQuery.current = null
+        setClients([])
+        setUnauthorized(true)
+      }
     } finally {
       if (isCurrent()) setLoading(false)
     }
@@ -346,6 +367,7 @@ const ClientPercentagePage = () => {
       )
 
       // Refresh the list
+      percentageLoader.current.clear()
       await fetchAllClientPercentages()
 
       setShowEditModal(false)
@@ -473,6 +495,7 @@ const ClientPercentagePage = () => {
           const r = await brokerAPI.getAllClientPercentages({
             page,
             page_size: pageSize,
+            ...(searchQuery.trim() && !searchType ? { login: searchQuery.trim() } : {}),
             sort_by: sortBy,
             sort_order: sortDirection,
           })
@@ -601,7 +624,7 @@ const ClientPercentagePage = () => {
         return
       }
       if (allRows.length < total) {
-        console.warn(`[ClientPercentage] Export collected ${allRows.length} of ${total} rows.`)
+        throw new Error(`Incomplete export: collected ${allRows.length} of ${total} rows.`)
       }
 
       // For "selected" mode, filter to only the chosen logins.
@@ -641,6 +664,7 @@ const ClientPercentagePage = () => {
         comment: bulkComment || `Bulk update: ${percentage}%`
       }))
       await brokerAPI.bulkUpdateClientPercentages(clients)
+      percentageLoader.current.clear()
       await fetchAllClientPercentages()
       setShowBulkModal(false)
       setSelectedRows(new Set())
@@ -746,6 +770,7 @@ const ClientPercentagePage = () => {
         await brokerAPI.bulkUpdateClientPercentages(batch)
         setCsvImportProgress({ done: Math.min(i + BATCH_SIZE, csvData.length), total: csvData.length })
       }
+      percentageLoader.current.clear()
       await fetchAllClientPercentages()
       setShowImportModal(false)
       setCsvData([])
@@ -786,7 +811,7 @@ const ClientPercentagePage = () => {
 
   const sortedClients = () => {
     // API handles search and sort — preserve server order, just apply group filter
-    const typedClients = filterPercentageTypes(clients, selectedTypes)
+    const typedClients = filterPercentageTypes(isAuthenticated && !unauthorized && displayedQuery.current?.user === user ? clients : [], selectedTypes)
     const searchedClients = searchType ? filterPercentageTypes(typedClients, [searchType]) : typedClients
     return filterByActiveGroup(searchedClients, 'client_login', 'clientpercentage')
   }
@@ -811,6 +836,7 @@ const ClientPercentagePage = () => {
   }
 
   const totalPages = Math.max(1, Math.ceil((useLocalTypeFiltering ? sortedClients().length : stats.total) / itemsPerPage))
+  useEffect(() => { if (!loading) setCurrentPage(page => Math.min(page, totalPages)) }, [totalPages, loading])
   const startIndex = (currentPage - 1) * itemsPerPage
   startIndex + itemsPerPage;
   const displayedClients = paginatedClients()
@@ -1026,7 +1052,7 @@ const ClientPercentagePage = () => {
                     onClick={() => {
                       if (isRefreshing) return
                       setIsRefreshing(true)
-                      fetchAllClientPercentages(1).finally(() => setTimeout(() => setIsRefreshing(false), 1000))
+                      fetchAllClientPercentages().finally(() => setIsRefreshing(false))
                     }}
                     disabled={isRefreshing}
                     className={`h-9 w-9 rounded-md border shadow-sm flex items-center justify-center transition-all ${
@@ -1617,7 +1643,7 @@ const ClientPercentagePage = () => {
       <AutoPercentageModal
         isOpen={showAutoPercentageModal}
         onClose={() => setShowAutoPercentageModal(false)}
-        onChanged={() => { fetchAllClientPercentages(currentPage) }}
+        onChanged={() => { percentageLoader.current.clear(); fetchAllClientPercentages(serverPage) }}
       />
 
       {/* Bulk Update Modal */}

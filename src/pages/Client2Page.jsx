@@ -17,9 +17,11 @@ import { useGroups } from '../contexts/groupContextStore'
 import { useIB } from '../contexts/ibContextStore'
 import { useAuth } from '../contexts/authContextStore'
 import { formatTime } from '../utils/dateFormatter'
+import { client2PageCache } from '../utils/client2PageCache'
 
 // Gate verbose logs behind env flag to keep console clean in production
 const DEBUG_LOGS = import.meta?.env?.VITE_DEBUG_LOGS === 'true'
+const EMPTY_CLIENT2_ROWS = []
 
 const Client2Page = () => {
   // Get positions and orders from DataContext for ClientPositionsModal
@@ -83,7 +85,7 @@ const Client2Page = () => {
   // IB context
   const { selectedIB, ibMT5Accounts, clearIBSelection } = useIB()
   // Auth context
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   // Suspend auto-refresh when unauthorized
   const [unauthorized, setUnauthorized] = useState(false)
 
@@ -101,16 +103,11 @@ const Client2Page = () => {
   const [error, setError] = useState('')
 
   // Data state
-  const [clients, setClients] = useState([])
-  const [totalClients, setTotalClients] = useState(0)
-  const [totals, setTotals] = useState({})
-  const [, setRebateTotals] = useState({})
-  const [totalsPercent, setTotalsPercent] = useState({}) // Percent totals (server response when percentage:true)
+  const [result, setResult] = useState(null)
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(100)
-  const [totalPages, setTotalPages] = useState(1)
   const [isPageChanging, setIsPageChanging] = useState(false)
   const pageChangeTimeoutRef = useRef(null)
 
@@ -570,6 +567,24 @@ const Client2Page = () => {
   // Face card visibility no longer auto-triggers percentage API calls to avoid unintended requests.
   const percentModeActive = cardFilterPercentMode === true
 
+  // Semantic identity avoids refetches when providers recreate equivalent arrays.
+  // Include the complete auth session, not just a possibly reused broker id.
+  let session = ''
+  try { session = localStorage.getItem('access_token') || '' } catch { /* No cache without a session. */ }
+  const queryKey = JSON.stringify([isAuthenticated ? session : '', user, currentPage, itemsPerPage,
+    currencyMode, debouncedSearchQuery, filters, columnFilters, mt5Accounts, accountRangeMin,
+    accountRangeMax, sortBy, sortOrder, percentModeActive, activeGroup || null, selectedIB, ibMT5Accounts, quickFilters])
+  const latestQueryKeyRef = useRef(queryKey)
+  latestQueryKeyRef.current = queryKey
+  const displayResult = isAuthenticated && !unauthorized
+    ? (result?.key === queryKey ? result : client2PageCache.get(session, queryKey)) : null
+  const clients = displayResult?.clients || EMPTY_CLIENT2_ROWS
+  const totalClients = displayResult?.totalClients ?? 0
+  const totalPages = displayResult?.totalPages ?? 1
+  const totals = displayResult?.totals || {}
+  const totalsPercent = displayResult?.totalsPercent || {}
+  const showTableSkeleton = !displayResult && (loading || initialLoad)
+
   // Filter modal state
   const [newFilterField, setNewFilterField] = useState('balance')
   const [newFilterOperator, setNewFilterOperator] = useState('greater_than')
@@ -927,15 +942,18 @@ const Client2Page = () => {
 
   // Checkbox filters are now handled server-side via API (no client-side filtering needed)
 
-  // AbortController ref; cancel only polling requests, never user-triggered filters/search
+  // Only a new query/manual refresh may replace a request; polling never does.
   const abortControllerRef = useRef(null)
-  const lastRequestWasSilentRef = useRef(false)
-  const refetchTimerRef = useRef(null)
+  const activeRequestRef = useRef(null)
 
   // Fetch clients data
   const fetchClients = useCallback(async (silent = false) => {
+    if (silent && isFetchingRef.current) return
+    if (activeRequestRef.current?.key === queryKey && isFetchingRef.current
+      && activeRequestRef.current.id === requestIdRef.current) return
     // Generate unique request ID to track this specific request
     const currentRequestId = ++requestIdRef.current
+    activeRequestRef.current = { key: queryKey, id: currentRequestId }
 
     // A newer query owns the table, including its error and loading state.
     if (abortControllerRef.current) {
@@ -944,13 +962,22 @@ const Client2Page = () => {
     // Create new AbortController for this request
     abortControllerRef.current = new AbortController()
     const requestOptions = { signal: abortControllerRef.current.signal, timeout: 15000 }
-    lastRequestWasSilentRef.current = !!silent
     isFetchingRef.current = true
+    const isCurrent = () => currentRequestId === requestIdRef.current
+      && latestQueryKeyRef.current === queryKey && !requestOptions.signal.aborted
+    const publish = (data) => {
+      if (!isCurrent()) return
+      const snapshot = { ...data, key: queryKey }
+      client2PageCache.set(session, queryKey, snapshot)
+      setResult(snapshot)
+      setInitialLoad(false)
+      setError('')
+    }
     if (!silent) setProgressActive(true)
     console.log('[Client2] fetchClients called - requestId:', currentRequestId, 'silent:', silent, 'columnFilters:', columnFilters)
     try {
       // Only show loading spinner on initial page load, not on subsequent fetches
-      if (!silent && initialLoad) {
+      if (!silent) {
         setLoading(true)
       }
       setError('')
@@ -1101,11 +1128,6 @@ const Client2Page = () => {
             } else {
               const selectedValues = Array.from(new Set(filterValues.map(v => String(v).trim()).filter(Boolean)))
 
-              // When there's a search active, only consider visible (filtered) values
-              const allValues = columnValues[columnKey] || []
-              const searchQ = (columnValueSearch[columnKey] || '').toLowerCase()
-              searchQ ? allValues.filter(v => String(v).toLowerCase().includes(searchQ)) : allValues;
-
               // Transform processorType friendly labels back to numeric values for API (1 or 0)
               let apiValues = selectedValues
               if (columnKey === 'processorType') {
@@ -1248,7 +1270,7 @@ const Client2Page = () => {
             chunkPayload.page = pageNum
             // Respect aborts and newer requests: pass signal and bail on staleness
             const resp = await brokerAPI.searchClients(chunkPayload, requestOptions)
-            if (requestOptions.signal.aborted || currentRequestId !== requestIdRef.current) {
+            if (!isCurrent()) {
               console.log('[Client2] ⏹️ Abort/replace detected during chunk merge; stopping early')
               return
             }
@@ -1371,12 +1393,8 @@ const Client2Page = () => {
         const paged = mergedRows.slice(start, end)
         const pages = Math.max(1, Math.ceil(totalMerged / limit))
 
-        setClients(paged)
-        setTotalClients(totalMerged)
-        setTotalPages(pages)
-        setTotals(totalsFromRows)
-        setTotalsPercent(totalsPercentFromRows)
-        setError('')
+        publish({ clients: paged, totalClients: totalMerged, totalPages: pages,
+          totals: totalsFromRows, totalsPercent: totalsPercentFromRows })
 
         // Done via chunked mode; skip single-request path
         return
@@ -1400,9 +1418,8 @@ const Client2Page = () => {
         const percentResponse = await brokerAPI.searchClients({ ...payload, percentage: true }, requestOptions)
 
         // Ignore response if it's from an outdated request (stale data)
-        if (currentRequestId !== requestIdRef.current) {
+        if (!isCurrent()) {
           console.log('[Client2] Ignoring stale percentage response from request', currentRequestId, '(current:', requestIdRef.current, ')')
-          if (!silent) setInitialLoad(false)
           return
         }
 
@@ -1412,21 +1429,15 @@ const Client2Page = () => {
         const percentTotal = Number(percentData?.total || percentClients.length || 0)
         const pages = Math.max(1, Number(percentData?.pages || 1))
 
-        setClients(percentClients)
-        setTotalClients(percentTotal)
-        setTotalPages(pages)
-        setTotals({}) // Clear normal totals
-        setTotalsPercent(percentTotals)
-        setError('')
-        setInitialLoad(false)
+        publish({ clients: percentClients, totalClients: percentTotal, totalPages: pages,
+          totals: {}, totalsPercent: percentTotals })
       } else {
         // Fetch only normal data
         const normalResponse = await brokerAPI.searchClients(payload, requestOptions)
 
         // Ignore response if it's from an outdated request (stale data)
-        if (currentRequestId !== requestIdRef.current) {
+        if (!isCurrent()) {
           console.log('[Client2] Ignoring stale normal response from request', currentRequestId, '(current:', requestIdRef.current, ')')
-          if (!silent) setInitialLoad(false)
           return
         }
 
@@ -1436,25 +1447,15 @@ const Client2Page = () => {
         const normalTotal = Number(normalData?.total || normalClients.length || 0)
         const pages = Math.max(1, Number(normalData?.pages || 1))
 
-        setClients(normalClients)
-        setTotalClients(normalTotal)
-        setTotalPages(pages)
-        setTotals(normalTotals)
-        setTotalsPercent({})
-        setError('')
-        setInitialLoad(false)
+        publish({ clients: normalClients, totalClients: normalTotal, totalPages: pages,
+          totals: normalTotals, totalsPercent: {} })
       }
     } catch (err) {
-      // A superseded request must not touch table state — but it must still release the
-      // initial-load overlay it started, otherwise the skeleton gets stuck until refresh.
-      if (currentRequestId !== requestIdRef.current) {
-        if (!silent && initialLoad) setInitialLoad(false)
-        return
-      }
+      // Superseded requests never own rows, errors, or loading state.
+      if (!isCurrent()) return
       const isCanceled = err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED' || /aborted|canceled/i.test(err?.message || '')
       if (isCanceled) {
         try { if (DEBUG_LOGS) console.debug('[Client2] fetchClients canceled (expected on fast refresh)') } catch { /* Retain the fallback when this operation is unavailable. */  }
-        if (!silent && initialLoad) setInitialLoad(false)
         return
       }
       console.error('[Client2] Error fetching clients:', err)
@@ -1492,21 +1493,25 @@ const Client2Page = () => {
       if (currentRequestId === requestIdRef.current) {
         isFetchingRef.current = false
         setIsSorting(false)
-        if (!silent) {
-          setLoading(false)
-          setProgressActive(false)
-        }
-      } else if (!silent && initialLoad) {
-        // The request was superseded mid-flight: never leave the initial skeleton up.
-        setInitialLoad(false)
+        setLoading(false)
+        setProgressActive(false)
       }
     }
-  }, [currentPage, itemsPerPage, debouncedSearchQuery, filters, columnFilters, mt5Accounts, accountRangeMin, accountRangeMax, sortBy, sortOrder, percentModeActive, activeGroup, selectedIB, ibMT5Accounts, quickFilters, currencyMode])
+  }, [queryKey, session, currentPage, itemsPerPage, debouncedSearchQuery, filters, columnFilters, mt5Accounts, accountRangeMin, accountRangeMax, sortBy, sortOrder, percentModeActive, activeGroup, selectedIB, ibMT5Accounts, quickFilters, currencyMode])
+  const fetchClientsRef = useRef(fetchClients)
+  fetchClientsRef.current = fetchClients
 
   // Resume after successful token refresh
   useEffect(() => {
     const onRefreshed = () => setUnauthorized(false)
-    const onLogout = () => setUnauthorized(true)
+    const onLogout = () => {
+      client2PageCache.clear()
+      requestIdRef.current++
+      abortControllerRef.current?.abort()
+      isFetchingRef.current = false
+      setResult(null)
+      setUnauthorized(true)
+    }
     window.addEventListener('auth:token_refreshed', onRefreshed)
     window.addEventListener('auth:logout', onLogout)
     return () => {
@@ -1522,22 +1527,13 @@ const Client2Page = () => {
     setSelectedColumnValues({})
   }, [selectedIB, ibMT5Accounts, activeGroup, mt5Accounts, accountRangeMin, accountRangeMax, filters, debouncedSearchQuery, quickFilters])
 
-  // Refetch when any percent face card visibility toggles (desktop only)
-  useEffect(() => {
-    if (isMobile || !isAuthenticated || unauthorized) return
-    fetchClients(false)
-  }, [percentModeActive, fetchClients, isMobile, isAuthenticated, unauthorized])
-
   // Client-side filtering for search across common text fields (including liquidateType)
   const sortedClients = useMemo(() => {
-    // If loading, return empty array to prevent showing stale data
-    if (loading) return []
-
     if (!Array.isArray(clients)) return []
     // Return clients as-is since search is already handled by the API
     // The searchQuery is sent to the API in fetchClients, so no need for client-side filtering
     return clients.filter(c => c != null && c.login != null)
-  }, [clients, loading])
+  }, [clients])
 
   // Compute percentage totals by summing percentage columns from client data
   useMemo(() => {
@@ -1574,57 +1570,18 @@ const Client2Page = () => {
     return () => clearTimeout(timer)
   }, [searchInput])
 
-  // Fetch rebate totals from API
-  const fetchRebateTotals = useCallback(async () => {
-    try {
-      const response = await brokerAPI.getIBCommissionTotals()
-      // API returns nested structure: response.data.data
-      const data = response?.data?.data || response?.data || {}
-      console.log('[Client2] Rebate totals received:', data)
-      setRebateTotals({
-        availableRebate: data.total_available_commission || 0,
-        availableRebatePercent: data.total_available_commission_percentage || 0,
-        totalRebate: data.total_commission || 0,
-        totalRebatePercent: data.total_commission_percentage || 0
-      })
-    } catch (err) {
-      console.error('[Client2] Error fetching rebate totals:', err)
-    }
-  }, [])
-
-  // Initial fetch and refetch on dependency changes (desktop only)
+  // One initial/query fetch. Search already has its own debounce; do not delay
+  // the first page or restart it for equivalent context object identities.
   useEffect(() => {
     if (isMobile || !isAuthenticated || unauthorized) return
-    if (refetchTimerRef.current) {
-      clearTimeout(refetchTimerRef.current)
-    }
-    // Debounce refetch slightly to coalesce rapid filter changes and avoid cancel spam
-    refetchTimerRef.current = setTimeout(() => {
-      console.log('[Client2] ⚡ Debounced refetch triggered')
-      fetchClients(false)
-      refetchTimerRef.current = null
-    }, 200)
+    const requestIds = requestIdRef
+    fetchClientsRef.current(false)
     return () => {
-      // Only cancel the pending debounce here. Do NOT abort the in-flight request:
-      // on first mount several deps settle in quick succession, and aborting the
-      // still-running initial fetch is what left the table empty until a hard refresh.
-      if (refetchTimerRef.current) {
-        clearTimeout(refetchTimerRef.current)
-        refetchTimerRef.current = null
-      }
+      requestIds.current++
+      abortControllerRef.current?.abort()
+      isFetchingRef.current = false
     }
-  }, [fetchClients, isMobile, isAuthenticated, unauthorized, columnFilters, debouncedSearchQuery, currentPage, itemsPerPage, sortBy, sortOrder, quickFilters])
-
-  // Auto-refresh rebate totals every 1 hour (desktop only)
-  useEffect(() => {
-    if (isMobile) return
-    // Fetch once on entry, then refresh hourly.
-    fetchRebateTotals()
-    const intervalId = setInterval(() => {
-      fetchRebateTotals()
-    }, 3600000) // 3600000ms = 1 hour
-    return () => clearInterval(intervalId)
-  }, [fetchRebateTotals, isMobile])
+  }, [queryKey, isMobile, isAuthenticated, unauthorized])
 
   // Percentage view is now controlled by Card Filter (cardVisibility.percentage) and fetched together with main data
 
@@ -1639,10 +1596,10 @@ const Client2Page = () => {
       // Skip polling while recent user filter actions are active or modal is open
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       if (Date.now() < pausePollingUntilRef.current || selectedClientRef.current) return
-      fetchClients(true) // silent = true, no loading spinner - will refresh with current filters applied
+      fetchClientsRef.current(true) // In-flight requests are never replaced by polling.
     }, 2000)
     return () => clearInterval(intervalId)
-  }, [fetchClients, isMobile, isAuthenticated, unauthorized])
+  }, [isMobile, isAuthenticated, unauthorized])
 
   // Trigger refresh as soon as app/tab becomes visible again.
   useEffect(() => {
@@ -1651,11 +1608,11 @@ const Client2Page = () => {
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return
       if (Date.now() < pausePollingUntilRef.current || selectedClientRef.current) return
-      fetchClients(true)
+      fetchClientsRef.current(true)
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
-  }, [fetchClients, isMobile, isAuthenticated, unauthorized])
+  }, [isMobile, isAuthenticated, unauthorized])
 
   // Handle search
   const handleSearch = () => {
@@ -1890,8 +1847,7 @@ const Client2Page = () => {
 
     console.log('[Client2] applyNumberFilter called for', columnKey, 'with config:', filterConfig)
 
-    // Clear clients and set loading state immediately to prevent showing old data
-    setClients([])
+    // The query key hides mismatched rows immediately.
     setLoading(true)
 
     setColumnFilters(prev => {
@@ -1963,8 +1919,7 @@ const Client2Page = () => {
 
     console.log('[Client2] applyTextFilter called for', columnKey, 'with config:', filterConfig)
 
-    // Clear clients and set loading state immediately to prevent showing old data
-    setClients([])
+    // The query key hides mismatched rows immediately.
     setLoading(true)
 
     setColumnFilters(prev => {
@@ -2371,8 +2326,7 @@ const Client2Page = () => {
       return
     }
 
-    // Clear clients and set loading state immediately to prevent showing old data
-    setClients([])
+    // The query key hides mismatched rows immediately.
     setLoading(true)
 
     setShowFilterDropdown(null)
@@ -3750,7 +3704,6 @@ const Client2Page = () => {
                 aria-checked={cardFilterPercentMode}
                 onClick={() => {
                   setCardFilterPercentMode(v => !v)
-                  fetchClients(false)
                 }}
                 title="Toggle percentage mode"
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-300 ease-in-out focus:outline-none ${
@@ -3844,13 +3797,13 @@ const Client2Page = () => {
           {/* Scrollable content: face cards + table */}
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           {/* 6 Face Cards - matching Positions module style */}
-          {showFaceCards && (initialLoad || (totals && Object.keys(totals).length > 0) || (totalsPercent && Object.keys(totalsPercent).length > 0)) && (
+          {showFaceCards && (displayResult || showTableSkeleton) && (
             <div className="mb-6">
               {(() => {
                 const t = cardFilterPercentMode ? totalsPercent : totals
                 const pnlValue = Number(t?.pnl || 0)
                 const floatingValue = Number(t?.floating || 0)
-                const isLoadingCards = initialLoad || loading
+                const isLoadingCards = showTableSkeleton
                 const isCompact = displayMode === 'compact'
                 // Helpers: produce a (display, full) pair for a numeric monetary value
                 const buildMoney = (raw) => {
@@ -5094,7 +5047,7 @@ const Client2Page = () => {
 
 
                     <tbody className="bg-white text-sm md:text-[15px]" key={`tbody-${animationKey}`}>
-                      {(loading || initialLoad || isRefreshing || isPageChanging) ? (
+                      {showTableSkeleton ? (
                         Array.from({ length: 8 }, (_, i) => (
                           <tr key={`skeleton-${i}`} className="bg-white border-b border-[#E1E1E1]">
                             {visibleColumnsList.map((col) => {
@@ -5119,7 +5072,7 @@ const Client2Page = () => {
                             })}
                           </tr>
                         ))
-                      ) : (!loading && !initialLoad && sortedClients.length === 0) ? (
+                      ) : (sortedClients.length === 0) ? (
                         <tr>
                           <td colSpan={visibleColumnsList.length} className="px-4 py-12 text-center">
                             <div className="text-gray-500">
